@@ -35,10 +35,8 @@ export const Route = createRootRoute({
       { property: "og:description", content: "Your personal nutrition journey" },
     ],
     links: [
-      {
-        rel: "stylesheet",
-        href: appCss,
-      },
+      { rel: "stylesheet", href: appCss },
+      { rel: "manifest", href: "/manifest.json" },
     ],
   }),
   shellComponent: RootShell,
