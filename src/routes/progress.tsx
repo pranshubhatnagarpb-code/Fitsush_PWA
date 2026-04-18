@@ -121,13 +121,29 @@ function ProgressPage() {
 
   return (
     <PageShell title="My Progress">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">
+          Track your measurements over time.
+        </p>
+        {clientProfile && (
+          <button
+            type="button"
+            onClick={() => setShowForm(true)}
+            className="flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
+          >
+            <Plus className="h-4 w-4" />
+            Add
+          </button>
+        )}
+      </div>
+
       {loading ? (
         <LoadingSpinner />
       ) : measurements.length === 0 ? (
         <EmptyState
           icon={<TrendingUp className="h-10 w-10" />}
           title="No measurements yet"
-          description="Your progress will appear here after your first assessment."
+          description='Tap "Add" to log your first measurement, or wait for your nutritionist to record one.'
         />
       ) : (
         <div className="space-y-6">
