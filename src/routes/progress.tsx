@@ -1,11 +1,12 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/hooks/use-auth";
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { supabase } from "@/lib/supabase";
 import type { ClientMeasurement } from "@/lib/types";
 import { PageShell } from "@/components/app-shell";
 import { EmptyState, LoadingSpinner } from "@/components/ui-cards";
-import { TrendingUp, Scale, Activity, Ruler, Percent } from "lucide-react";
+import { TrendingUp, Scale, Activity, Ruler, Percent, Plus } from "lucide-react";
+import { MeasurementForm } from "@/components/measurement-form";
 import {
   LineChart,
   Line,
