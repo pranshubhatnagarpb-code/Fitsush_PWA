@@ -7,12 +7,9 @@ export const Route = createFileRoute("/login")({
   component: LoginPage,
 });
 
-type Mode = "email" | "phone";
-
 function LoginPage() {
   const { signIn, isAuthenticated } = useAuth();
-  const [mode, setMode] = useState<Mode>("email");
-  const [identifier, setIdentifier] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -26,11 +23,7 @@ function LoginPage() {
     e.preventDefault();
     setError("");
     setLoading(true);
-    const payload =
-      mode === "email"
-        ? { email: identifier.trim(), password }
-        : { phone: identifier.trim(), password };
-    const result = await signIn(payload);
+    const result = await signIn({ email: email.trim(), password });
     if (result.error) {
       setError(result.error);
       setLoading(false);
@@ -50,28 +43,6 @@ function LoginPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-4">
-        {/* Mode toggle */}
-        <div className="grid grid-cols-2 rounded-xl border bg-card p-1">
-          {(["email", "phone"] as const).map((m) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => {
-                setMode(m);
-                setIdentifier("");
-                setError("");
-              }}
-              className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                mode === m
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {m === "email" ? "Email" : "Phone"}
-            </button>
-          ))}
-        </div>
-
         {error && (
           <div className="rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive">
             {error}
@@ -79,24 +50,19 @@ function LoginPage() {
         )}
 
         <div>
-          <label htmlFor="identifier" className="mb-1.5 block text-sm font-medium text-foreground">
-            {mode === "email" ? "Email" : "Phone"}
+          <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-foreground">
+            Email
           </label>
           <input
-            id="identifier"
-            type={mode === "email" ? "email" : "tel"}
+            id="email"
+            type="email"
             required
-            value={identifier}
-            onChange={(e) => setIdentifier(e.target.value)}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             className="w-full rounded-xl border bg-card px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-            placeholder={mode === "email" ? "you@example.com" : "+919876543210"}
-            autoComplete={mode === "email" ? "email" : "tel"}
+            placeholder="you@example.com"
+            autoComplete="email"
           />
-          {mode === "phone" && (
-            <p className="mt-1 text-xs text-muted-foreground">
-              Include country code, e.g. +91…
-            </p>
-          )}
         </div>
 
         <div>
@@ -122,6 +88,10 @@ function LoginPage() {
         >
           {loading ? "Signing in…" : "Sign In"}
         </button>
+
+        <p className="pt-1 text-center text-xs text-muted-foreground">
+          Phone login is being set up — please use email for now.
+        </p>
       </form>
 
       <p className="mt-8 text-xs text-muted-foreground">
