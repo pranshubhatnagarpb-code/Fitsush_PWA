@@ -1,11 +1,12 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/hooks/use-auth";
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { supabase } from "@/lib/supabase";
 import type { ClientMeasurement } from "@/lib/types";
 import { PageShell } from "@/components/app-shell";
 import { EmptyState, LoadingSpinner } from "@/components/ui-cards";
-import { TrendingUp, Scale, Activity, Ruler, Percent } from "lucide-react";
+import { TrendingUp, Scale, Activity, Ruler, Percent, Plus } from "lucide-react";
+import { MeasurementForm } from "@/components/measurement-form";
 import {
   LineChart,
   Line,
@@ -81,6 +82,7 @@ function ProgressPage() {
   const navigate = useNavigate();
   const [measurements, setMeasurements] = useState<ClientMeasurement[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -88,18 +90,21 @@ function ProgressPage() {
     }
   }, [authLoading, isAuthenticated, navigate]);
 
-  useEffect(() => {
+  const loadMeasurements = useCallback(async () => {
     if (!clientProfile) return;
-    supabase
+    const { data } = await supabase
       .from("client_measurements")
       .select("*")
       .eq("client_id", clientProfile.id)
-      .order("measurement_date", { ascending: true })
-      .then(({ data }) => {
-        setMeasurements((data ?? []) as ClientMeasurement[]);
-        setLoading(false);
-      });
+      .order("measurement_date", { ascending: true });
+    setMeasurements((data ?? []) as ClientMeasurement[]);
+    setLoading(false);
   }, [clientProfile]);
+
+  useEffect(() => {
+    if (!clientProfile) return;
+    loadMeasurements();
+  }, [clientProfile, loadMeasurements]);
 
   if (authLoading || !isAuthenticated) return <LoadingSpinner />;
 
@@ -116,13 +121,29 @@ function ProgressPage() {
 
   return (
     <PageShell title="My Progress">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">
+          Track your measurements over time.
+        </p>
+        {clientProfile && (
+          <button
+            type="button"
+            onClick={() => setShowForm(true)}
+            className="flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
+          >
+            <Plus className="h-4 w-4" />
+            Add
+          </button>
+        )}
+      </div>
+
       {loading ? (
         <LoadingSpinner />
       ) : measurements.length === 0 ? (
         <EmptyState
           icon={<TrendingUp className="h-10 w-10" />}
           title="No measurements yet"
-          description="Your progress will appear here after your first assessment."
+          description='Tap "Add" to log your first measurement, or wait for your nutritionist to record one.'
         />
       ) : (
         <div className="space-y-6">
@@ -304,6 +325,19 @@ function ProgressPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {showForm && clientProfile && (
+        <MeasurementForm
+          clientId={clientProfile.id}
+          heightCm={clientProfile.height ?? null}
+          onClose={() => setShowForm(false)}
+          onSaved={() => {
+            setShowForm(false);
+            setLoading(true);
+            loadMeasurements();
+          }}
+        />
       )}
     </PageShell>
   );
