@@ -29,10 +29,16 @@ export const Route = createRootRoute({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "NutriCare — Client Portal" },
+      { title: "MKR Care — Client Portal" },
       { name: "description", content: "Your personal nutrition journey" },
-      { property: "og:title", content: "NutriCare — Client Portal" },
+      { property: "og:title", content: "MKR Care — Client Portal" },
       { property: "og:description", content: "Your personal nutrition journey" },
+      { name: "twitter:title", content: "MKR Care — Client Portal" },
+      { name: "twitter:description", content: "Your personal nutrition journey" },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/0e3bf314-c652-4124-899f-0675f7a295c8/id-preview-e3e78612--cc6bb856-0918-4a2a-b63c-3f130c5e162c.lovable.app-1776496471283.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/0e3bf314-c652-4124-899f-0675f7a295c8/id-preview-e3e78612--cc6bb856-0918-4a2a-b63c-3f130c5e162c.lovable.app-1776496471283.png" },
+      { name: "twitter:card", content: "summary_large_image" },
+      { property: "og:type", content: "website" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
