@@ -326,6 +326,19 @@ function ProgressPage() {
           </div>
         </div>
       )}
+
+      {showForm && clientProfile && (
+        <MeasurementForm
+          clientId={clientProfile.id}
+          heightCm={clientProfile.height ?? null}
+          onClose={() => setShowForm(false)}
+          onSaved={() => {
+            setShowForm(false);
+            setLoading(true);
+            loadMeasurements();
+          }}
+        />
+      )}
     </PageShell>
   );
 }
