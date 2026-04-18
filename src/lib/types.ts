@@ -43,8 +43,17 @@ export interface ClientMeasurement {
   id: string;
   client_id: string;
   measurement_date: string;
+  weight: number | null;
   bmi: number | null;
-  notes: string | null;
+  body_fat_percentage: number | null;
+  waist: number | null;
+  hip: number | null;
+  chest: number | null;
+  thigh: number | null;
+  arm: number | null;
+  neck: number | null;
+  measurement_notes: string | null;
+  notes?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -55,4 +64,23 @@ export interface ClientFeedback {
   feedback_text: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface ClientDietPlanFile {
+  id: string;
+  client_id: string;
+  diet_plan_id: string | null;
+  file_path: string;
+  file_name: string | null;
+  plan_name: string | null;
+  bucket?: string | null;
+  uploaded_at?: string | null;
+  created_at: string;
+}
+
+export interface ClientPortalUser {
+  id: string;
+  user_id: string;
+  client_id: string;
+  created_at: string;
 }

@@ -2,9 +2,9 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/hooks/use-auth";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import type { Appointment, DietPlan, ClientFeedback } from "@/lib/types";
+import type { Appointment, DietPlan, ClientFeedback, ClientMeasurement } from "@/lib/types";
 import { PageShell } from "@/components/app-shell";
-import { SummaryCard, EmptyState, LoadingSpinner } from "@/components/ui-cards";
+import { SummaryCard, LoadingSpinner } from "@/components/ui-cards";
 import { Scale, Utensils, Calendar, MessageSquare, Sparkles } from "lucide-react";
 
 export const Route = createFileRoute("/dashboard")({
@@ -17,6 +17,7 @@ function DashboardPage() {
   const [activePlan, setActivePlan] = useState<DietPlan | null>(null);
   const [nextAppointment, setNextAppointment] = useState<Appointment | null>(null);
   const [latestFeedback, setLatestFeedback] = useState<ClientFeedback | null>(null);
+  const [latestMeasurement, setLatestMeasurement] = useState<ClientMeasurement | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -28,7 +29,7 @@ function DashboardPage() {
   useEffect(() => {
     if (!clientProfile) return;
     const fetchData = async () => {
-      const [planRes, apptRes, feedbackRes] = await Promise.all([
+      const [planRes, apptRes, feedbackRes, measurementRes] = await Promise.all([
         supabase
           .from("diet_plans")
           .select("*")
@@ -52,10 +53,18 @@ function DashboardPage() {
           .order("created_at", { ascending: false })
           .limit(1)
           .maybeSingle(),
+        supabase
+          .from("client_measurements")
+          .select("*")
+          .eq("client_id", clientProfile.id)
+          .order("measurement_date", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
       ]);
       setActivePlan(planRes.data);
       setNextAppointment(apptRes.data);
       setLatestFeedback(feedbackRes.data);
+      setLatestMeasurement(measurementRes.data as ClientMeasurement | null);
       setLoading(false);
     };
     fetchData();
@@ -81,8 +90,21 @@ function DashboardPage() {
           <SummaryCard
             icon={<Scale className="h-4 w-4" />}
             label="Weight"
-            value={clientProfile?.weight ? `${clientProfile.weight} kg` : null}
-            subtitle={clientProfile?.goal ?? undefined}
+            value={
+              latestMeasurement?.weight
+                ? `${latestMeasurement.weight} kg`
+                : clientProfile?.weight
+                  ? `${clientProfile.weight} kg`
+                  : null
+            }
+            subtitle={
+              latestMeasurement?.measurement_date
+                ? new Date(latestMeasurement.measurement_date).toLocaleDateString("en-IN", {
+                    day: "numeric",
+                    month: "short",
+                  })
+                : (clientProfile?.goal ?? undefined)
+            }
             variant="primary"
           />
           <SummaryCard

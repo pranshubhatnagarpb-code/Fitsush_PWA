@@ -3,13 +3,17 @@ import { supabase } from "@/lib/supabase";
 import type { User, Session } from "@supabase/supabase-js";
 import type { Client } from "@/lib/types";
 
+type SignInPayload =
+  | { email: string; password: string }
+  | { phone: string; password: string };
+
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   clientProfile: Client | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: string | null }>;
+  signIn: (payload: SignInPayload) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 }
 
@@ -21,43 +25,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [clientProfile, setClientProfile] = useState<Client | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchClientProfile = async (email: string) => {
-    const { data } = await supabase
+  const fetchClientProfile = async (userId: string) => {
+    // Resolve via client_portal_users → clients
+    const { data: link } = await supabase
+      .from("client_portal_users")
+      .select("client_id")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (!link?.client_id) {
+      setClientProfile(null);
+      return;
+    }
+    const { data: client } = await supabase
       .from("clients")
       .select("*")
-      .eq("email", email)
+      .eq("id", link.client_id)
       .maybeSingle();
-    setClientProfile(data);
+    setClientProfile(client);
   };
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      (_event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
-        if (session?.user?.email) {
-          await fetchClientProfile(session.user.email);
+        if (session?.user?.id) {
+          // defer to avoid deadlock with onAuthStateChange
+          setTimeout(() => {
+            fetchClientProfile(session.user.id).finally(() => setIsLoading(false));
+          }, 0);
         } else {
           setClientProfile(null);
+          setIsLoading(false);
         }
-        setIsLoading(false);
       }
     );
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
-      if (session?.user?.email) {
-        fetchClientProfile(session.user.email);
+      if (session?.user?.id) {
+        fetchClientProfile(session.user.id).finally(() => setIsLoading(false));
+      } else {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const signIn = async (payload: SignInPayload) => {
+    const { error } = await supabase.auth.signInWithPassword(payload as never);
     return { error: error?.message ?? null };
   };
 
