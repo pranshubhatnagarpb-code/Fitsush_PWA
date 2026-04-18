@@ -82,6 +82,7 @@ function ProgressPage() {
   const navigate = useNavigate();
   const [measurements, setMeasurements] = useState<ClientMeasurement[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -89,18 +90,21 @@ function ProgressPage() {
     }
   }, [authLoading, isAuthenticated, navigate]);
 
-  useEffect(() => {
+  const loadMeasurements = useCallback(async () => {
     if (!clientProfile) return;
-    supabase
+    const { data } = await supabase
       .from("client_measurements")
       .select("*")
       .eq("client_id", clientProfile.id)
-      .order("measurement_date", { ascending: true })
-      .then(({ data }) => {
-        setMeasurements((data ?? []) as ClientMeasurement[]);
-        setLoading(false);
-      });
+      .order("measurement_date", { ascending: true });
+    setMeasurements((data ?? []) as ClientMeasurement[]);
+    setLoading(false);
   }, [clientProfile]);
+
+  useEffect(() => {
+    if (!clientProfile) return;
+    loadMeasurements();
+  }, [clientProfile, loadMeasurements]);
 
   if (authLoading || !isAuthenticated) return <LoadingSpinner />;
 
