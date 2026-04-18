@@ -24,6 +24,10 @@ export interface DietPlan {
   start_date: string | null;
   end_date: string | null;
   instructions: string | null;
+  // legacy PDF fields stored directly on the plan row (used by current PMS)
+  pdf_file_path: string | null;
+  pdf_file_name: string | null;
+  pdf_uploaded_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -72,9 +76,6 @@ export interface ClientDietPlanFile {
   diet_plan_id: string | null;
   file_path: string;
   file_name: string | null;
-  plan_name: string | null;
-  bucket?: string | null;
-  uploaded_at?: string | null;
   created_at: string;
 }
 
