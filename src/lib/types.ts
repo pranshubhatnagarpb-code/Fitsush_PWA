@@ -21,6 +21,8 @@ export interface DietPlan {
   client_id: string;
   plan_name: string | null;
   status: string;
+  is_published: boolean | null;
+  published_at: string | null;
   start_date: string | null;
   end_date: string | null;
   instructions: string | null;
@@ -76,6 +78,8 @@ export interface ClientDietPlanFile {
   diet_plan_id: string | null;
   file_path: string;
   file_name: string | null;
+  is_published: boolean | null;
+  published_at: string | null;
   created_at: string;
 }
 
@@ -84,4 +88,14 @@ export interface ClientPortalUser {
   user_id: string;
   client_id: string;
   created_at: string;
+}
+
+export interface ClientBloodReport {
+  id: string;
+  client_id: string;
+  report_date: string | null;
+  extracted_data: Record<string, unknown> | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
 }
