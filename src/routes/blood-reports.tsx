@@ -114,8 +114,8 @@ function BloodReportsPage() {
         )}
       </div>
 
-      <div className="mb-5 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-xs text-amber-900 dark:text-amber-200">
-        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+      <div className="mb-5 flex items-start gap-2 rounded-xl border bg-muted/50 px-3 py-2.5 text-xs text-muted-foreground">
+        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
         <p>
           PDF upload and auto-extraction will be enabled once the backend storage
           fields are added. For now you can log key values manually.
