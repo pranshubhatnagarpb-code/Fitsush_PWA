@@ -1,11 +1,12 @@
 import { Link, useLocation } from "@tanstack/react-router";
-import { LayoutDashboard, Utensils, TrendingUp, User, LogOut } from "lucide-react";
+import { LayoutDashboard, Utensils, TrendingUp, FlaskConical, User, LogOut } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 
 const navItems = [
   { to: "/dashboard", label: "Home", icon: LayoutDashboard },
-  { to: "/diet-plan", label: "Diet Plan", icon: Utensils },
+  { to: "/diet-plan", label: "Diet", icon: Utensils },
   { to: "/progress", label: "Progress", icon: TrendingUp },
+  { to: "/blood-reports", label: "Reports", icon: FlaskConical },
   { to: "/profile", label: "Profile", icon: User },
 ] as const;
 

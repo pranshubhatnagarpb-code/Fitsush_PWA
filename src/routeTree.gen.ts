@@ -14,6 +14,7 @@ import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as DietPlanRouteImport } from './routes/diet-plan'
 import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as BloodReportsRouteImport } from './routes/blood-reports'
 import { Route as IndexRouteImport } from './routes/index'
 
 const ProgressRoute = ProgressRouteImport.update({
@@ -41,6 +42,11 @@ const DashboardRoute = DashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BloodReportsRoute = BloodReportsRouteImport.update({
+  id: '/blood-reports',
+  path: '/blood-reports',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -49,6 +55,7 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/blood-reports': typeof BloodReportsRoute
   '/dashboard': typeof DashboardRoute
   '/diet-plan': typeof DietPlanRoute
   '/login': typeof LoginRoute
@@ -57,6 +64,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/blood-reports': typeof BloodReportsRoute
   '/dashboard': typeof DashboardRoute
   '/diet-plan': typeof DietPlanRoute
   '/login': typeof LoginRoute
@@ -66,6 +74,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/blood-reports': typeof BloodReportsRoute
   '/dashboard': typeof DashboardRoute
   '/diet-plan': typeof DietPlanRoute
   '/login': typeof LoginRoute
@@ -76,16 +85,25 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/blood-reports'
     | '/dashboard'
     | '/diet-plan'
     | '/login'
     | '/profile'
     | '/progress'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/dashboard' | '/diet-plan' | '/login' | '/profile' | '/progress'
+  to:
+    | '/'
+    | '/blood-reports'
+    | '/dashboard'
+    | '/diet-plan'
+    | '/login'
+    | '/profile'
+    | '/progress'
   id:
     | '__root__'
     | '/'
+    | '/blood-reports'
     | '/dashboard'
     | '/diet-plan'
     | '/login'
@@ -95,6 +113,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  BloodReportsRoute: typeof BloodReportsRoute
   DashboardRoute: typeof DashboardRoute
   DietPlanRoute: typeof DietPlanRoute
   LoginRoute: typeof LoginRoute
@@ -139,6 +158,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/blood-reports': {
+      id: '/blood-reports'
+      path: '/blood-reports'
+      fullPath: '/blood-reports'
+      preLoaderRoute: typeof BloodReportsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -151,6 +177,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  BloodReportsRoute: BloodReportsRoute,
   DashboardRoute: DashboardRoute,
   DietPlanRoute: DietPlanRoute,
   LoginRoute: LoginRoute,
