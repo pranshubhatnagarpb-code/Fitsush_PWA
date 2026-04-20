@@ -42,8 +42,8 @@ function DietPlanPage() {
   useEffect(() => {
     if (!clientProfile) return;
     const load = async () => {
-      // Pull ALL plans for this client (not just active) so completed/saved
-      // plans with PDFs still surface.
+      // Pull ALL plans so we can match published files to their plan metadata,
+      // but only PUBLISHED items are surfaced to the client.
       const [plansRes, filesRes] = await Promise.all([
         supabase
           .from("diet_plans")
@@ -54,19 +54,25 @@ function DietPlanPage() {
           .from("client_diet_plan_files")
           .select("*")
           .eq("client_id", clientProfile.id)
+          .eq("is_published", true)
           .order("created_at", { ascending: false }),
       ]);
 
       const plans = (plansRes.data ?? []) as DietPlan[];
       const files = (filesRes.data ?? []) as ClientDietPlanFile[];
 
+      // Active plan summary — prefer a published+active plan, fall back to active.
       const active =
-        plans.find((p) => (p.status ?? "").toLowerCase() === "active") ?? null;
+        plans.find(
+          (p) => p.is_published === true && (p.status ?? "").toLowerCase() === "active"
+        ) ??
+        plans.find((p) => (p.status ?? "").toLowerCase() === "active") ??
+        null;
       setActivePlan(active);
 
-      // Build one merged, de-duplicated PDF list:
-      // 1. PDFs from client_diet_plan_files (new table)
-      // 2. PDFs from diet_plans.pdf_file_path (legacy/PMS)
+      // Build one merged, de-duplicated PUBLISHED PDF list:
+      // 1. Published PDFs from client_diet_plan_files (canonical)
+      // 2. Legacy fallback: diet_plans.pdf_file_path on PUBLISHED plans only
       const seenPaths = new Set<string>();
       const items: PdfItem[] = [];
       const planById = new Map(plans.map((p) => [p.id, p]));
@@ -81,12 +87,14 @@ function DietPlanPage() {
           file_name: f.file_name,
           plan_name: linkedPlan?.plan_name ?? null,
           status: linkedPlan?.status ?? null,
-          uploaded_at: f.created_at,
+          uploaded_at: f.published_at ?? f.created_at,
           source: "client_diet_plan_files",
         });
       }
 
       for (const p of plans) {
+        // Legacy fallback: only include if the plan itself is explicitly published.
+        if (!p.is_published) continue;
         if (!p.pdf_file_path || seenPaths.has(p.pdf_file_path)) continue;
         seenPaths.add(p.pdf_file_path);
         items.push({
@@ -95,7 +103,7 @@ function DietPlanPage() {
           file_name: p.pdf_file_name,
           plan_name: p.plan_name,
           status: p.status,
-          uploaded_at: p.pdf_uploaded_at ?? p.created_at,
+          uploaded_at: p.published_at ?? p.pdf_uploaded_at ?? p.created_at,
           source: "diet_plans",
         });
       }
@@ -210,7 +218,7 @@ function DietPlanPage() {
           {/* Diet chart PDFs (from new table + legacy column) */}
           <div>
             <h3 className="mb-3 font-display text-sm font-semibold text-foreground">
-              Diet Chart PDFs
+              Published Diet Charts
             </h3>
 
             {errorMsg && (
@@ -222,8 +230,8 @@ function DietPlanPage() {
             {pdfs.length === 0 ? (
               <EmptyState
                 icon={<FileDown className="h-10 w-10" />}
-                title="No diet charts yet"
-                description="Your nutritionist will upload your diet chart here."
+                title="No published charts yet"
+                description="Your nutritionist will publish your diet chart here when it's ready."
               />
             ) : (
               <ul className="space-y-2">
