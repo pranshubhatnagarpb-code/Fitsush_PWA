@@ -26,17 +26,18 @@ const indexHtml = `<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="manifest" href="/manifest.json" />
+    <title>Loading...</title>
     <link rel="stylesheet" href="/assets/${cssFile}" />
-    <title>Wellness Portal</title>
+    <script>
+      window.__INITIAL__ = true;
+    </script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f0fdf4;color:#166534;">Loading wellness portal...</div></div>
     <script type="module" src="/assets/${jsFile}"></script>
   </body>
 </html>`;
 
 fs.writeFileSync(path.join(clientDir, 'index.html'), indexHtml);
-console.log(`Generated index.html with ${jsFile} (largest)`);
+console.log(`Generated index.html with ${jsFile}`);
