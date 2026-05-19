@@ -1,6 +1,0 @@
-/favicon.ico /favicon.ico 200
-/manifest.json /manifest.json 200
-/assets/* /assets/:splat 200
-/icons/* /icons/:splat 200
-/index.html /index.html 200
-* /index.html 200
