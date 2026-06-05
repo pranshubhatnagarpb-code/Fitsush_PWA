@@ -2,18 +2,23 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/hooks/use-auth";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { supabase } from "@/lib/supabase";
-import type { ClientMeasurement } from "@/lib/types";
+import type { ClientMeasurement, ProgressEntry } from "@/lib/types";
 import { PageShell } from "@/components/app-shell";
 import { EmptyState, LoadingSpinner } from "@/components/ui-cards";
-import { TrendingUp, Scale, Activity, Ruler, Percent, Plus } from "lucide-react";
+import { TrendingUp, Scale, Activity, Ruler, Percent, Plus, HeartPulse } from "lucide-react";
 import { MeasurementForm } from "@/components/measurement-form";
+import { HealthCheckinForm } from "@/components/health-checkin-form";
 import {
   LineChart,
   Line,
+  BarChart,
+  Bar,
+  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
+  ReferenceLine,
   ResponsiveContainer,
 } from "recharts";
 
@@ -58,6 +63,152 @@ const METRIC_UNIT: Record<MetricKey, string> = {
 
 const SUMMARY_METRICS: MetricKey[] = ["weight", "bmi", "waist", "hip", "body_fat_percentage"];
 const CHART_METRICS: MetricKey[] = ["weight", "bmi", "waist"];
+
+// Lower is better for these metrics
+const LOWER_IS_BETTER: MetricKey[] = [
+  "weight", "bmi", "body_fat_percentage", "waist", "hip", "chest", "thigh", "arm", "neck",
+];
+
+interface MetricTrend {
+  key: MetricKey;
+  first: number;
+  latest: number;
+  change: number;
+  pct: number;
+  positive: boolean; // true = improvement
+}
+
+function buildTrends(measurements: ClientMeasurement[]): MetricTrend[] {
+  if (measurements.length < 2) return [];
+  const first = measurements[0];
+  const last = measurements[measurements.length - 1];
+  const trends: MetricTrend[] = [];
+  for (const key of HISTORY_METRICS) {
+    const f = first[key];
+    const l = last[key];
+    if (typeof f !== "number" || typeof l !== "number") continue;
+    const change = l - f;
+    const pct = f !== 0 ? (change / f) * 100 : 0;
+    const positive = LOWER_IS_BETTER.includes(key) ? change < 0 : change > 0;
+    trends.push({ key, first: f, latest: l, change, pct, positive });
+  }
+  return trends;
+}
+
+function OverallAnalysisCard({ measurements }: { measurements: ClientMeasurement[] }) {
+  const trends = buildTrends(measurements);
+
+  if (trends.length === 0) {
+    return (
+      <div className="rounded-2xl border bg-card p-4">
+        <div className="mb-2 flex items-center gap-2">
+          <TrendingUp className="h-4 w-4 text-primary" />
+          <h4 className="text-sm font-semibold text-foreground">Overall Analysis</h4>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Log at least 2 measurements to see your trend analysis.
+        </p>
+      </div>
+    );
+  }
+
+  const improved = trends.filter((t) => t.positive);
+  const worsened = trends.filter((t) => !t.positive && Math.abs(t.change) > 0.01);
+
+  const spanDays = Math.round(
+    (new Date(measurements[measurements.length - 1].measurement_date).getTime() -
+      new Date(measurements[0].measurement_date).getTime()) /
+      (1000 * 60 * 60 * 24)
+  );
+
+  let headline = "";
+  if (improved.length > worsened.length) {
+    headline = "Overall progress is looking positive!";
+  } else if (worsened.length > improved.length) {
+    headline = "Some metrics need attention — keep going!";
+  } else {
+    headline = "Mixed progress — consistency is key.";
+  }
+
+  // Bar chart data: % change, positive = improvement (flipped sign for "lower is better" metrics)
+  const chartData = trends.map((t) => ({
+    name: METRIC_LABEL[t.key],
+    pct: parseFloat((t.positive ? Math.abs(t.pct) : -Math.abs(t.pct)).toFixed(1)),
+    positive: t.positive,
+  }));
+
+  return (
+    <div className="rounded-2xl border bg-card p-4">
+      <div className="mb-1 flex items-center gap-2">
+        <TrendingUp className="h-4 w-4 text-primary" />
+        <h4 className="text-sm font-semibold text-foreground">Overall Analysis</h4>
+        {spanDays > 0 && (
+          <span className="ml-auto text-xs text-muted-foreground">
+            Over {spanDays} day{spanDays !== 1 ? "s" : ""}
+          </span>
+        )}
+      </div>
+
+      <p className="mb-3 text-xs text-muted-foreground">{headline}</p>
+
+      {/* Bar chart: % change per metric */}
+      <ResponsiveContainer width="100%" height={Math.max(120, chartData.length * 32)}>
+        <BarChart
+          data={chartData}
+          layout="vertical"
+          margin={{ top: 0, right: 24, left: 4, bottom: 0 }}
+        >
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
+          <XAxis
+            type="number"
+            tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
+            axisLine={false}
+            tickLine={false}
+            tickFormatter={(v) => `${v > 0 ? "+" : ""}${v}%`}
+          />
+          <YAxis
+            type="category"
+            dataKey="name"
+            tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
+            axisLine={false}
+            tickLine={false}
+            width={56}
+          />
+          <ReferenceLine x={0} stroke="var(--border)" />
+          <Tooltip
+            contentStyle={{
+              background: "var(--card)",
+              border: "1px solid var(--border)",
+              borderRadius: "0.75rem",
+              fontSize: 12,
+            }}
+            formatter={(v: number) => [`${v > 0 ? "+" : ""}${v}%`, "Change"]}
+          />
+          <Bar dataKey="pct" radius={[0, 4, 4, 0]} maxBarSize={18}>
+            {chartData.map((entry, i) => (
+              <Cell
+                key={i}
+                fill={entry.positive ? "var(--color-success)" : "var(--color-destructive)"}
+                fillOpacity={0.85}
+              />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+
+      <div className="mt-3 flex gap-4 text-xs text-muted-foreground">
+        <span className="flex items-center gap-1">
+          <span className="inline-block h-2 w-2 rounded-full bg-success" />
+          {improved.length} improving
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="inline-block h-2 w-2 rounded-full bg-destructive" />
+          {worsened.length} to work on
+        </span>
+      </div>
+    </div>
+  );
+}
 const HISTORY_METRICS: MetricKey[] = [
   "weight",
   "bmi",
@@ -81,8 +232,11 @@ function ProgressPage() {
   const { clientProfile, isAuthenticated, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [measurements, setMeasurements] = useState<ClientMeasurement[]>([]);
+  const [progressEntries, setProgressEntries] = useState<ProgressEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [showCheckinForm, setShowCheckinForm] = useState(false);
+  const [expandedEntry, setExpandedEntry] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -92,12 +246,20 @@ function ProgressPage() {
 
   const loadMeasurements = useCallback(async () => {
     if (!clientProfile) return;
-    const { data } = await supabase
-      .from("client_measurements")
-      .select("*")
-      .eq("client_id", clientProfile.id)
-      .order("measurement_date", { ascending: true });
-    setMeasurements((data ?? []) as ClientMeasurement[]);
+    const [measRes, entriesRes] = await Promise.all([
+      supabase
+        .from("client_measurements")
+        .select("*")
+        .eq("client_id", clientProfile.id)
+        .order("measurement_date", { ascending: true }),
+      supabase
+        .from("client_progress_entries")
+        .select("*")
+        .eq("client_id", clientProfile.id)
+        .order("entry_date", { ascending: false }),
+    ]);
+    setMeasurements((measRes.data ?? []) as ClientMeasurement[]);
+    setProgressEntries((entriesRes.data ?? []) as ProgressEntry[]);
     setLoading(false);
   }, [clientProfile]);
 
@@ -121,6 +283,91 @@ function ProgressPage() {
 
   return (
     <PageShell title="My Progress">
+      {/* Health Check-in section */}
+      <div className="mb-6">
+        <div className="mb-3 flex items-center justify-between">
+          <div>
+            <h3 className="font-display text-sm font-semibold text-foreground">Health Check-ins</h3>
+            <p className="text-xs text-muted-foreground">Log how you're feeling periodically</p>
+          </div>
+          {clientProfile && (
+            <button
+              type="button"
+              onClick={() => setShowCheckinForm(true)}
+              className="flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
+            >
+              <HeartPulse className="h-4 w-4" />
+              Log Check-in
+            </button>
+          )}
+        </div>
+
+        {progressEntries.length === 0 ? (
+          <div className="rounded-2xl border bg-card px-4 py-6 text-center text-sm text-muted-foreground">
+            No check-ins yet — tap "Log Check-in" to record your first one.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {progressEntries.map((entry) => {
+              const isOpen = expandedEntry === entry.id;
+              const ratings = [
+                ["Sleep", entry.sleep_quality_rating], ["Digestion", entry.digestion_rating],
+                ["Energy", entry.energy_rating], ["Skin", entry.skin_rating],
+                ["Hair", entry.hair_rating],
+              ].filter(([, v]) => v != null) as [string, number][];
+              return (
+                <div key={entry.id} className="rounded-2xl border bg-card">
+                  <button
+                    onClick={() => setExpandedEntry(isOpen ? null : entry.id)}
+                    className="flex w-full items-center justify-between px-4 py-3 text-left"
+                  >
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className="text-sm font-semibold text-foreground">
+                        {new Date(entry.entry_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                      </span>
+                      {entry.weight_kg && <span className="text-xs text-muted-foreground">{entry.weight_kg} kg</span>}
+                      {ratings.slice(0, 3).map(([label, val]) => (
+                        <span key={label} className="text-xs text-muted-foreground">{label} {val}/5</span>
+                      ))}
+                    </div>
+                    <span className="text-xs text-muted-foreground">{isOpen ? "▲" : "▼"}</span>
+                  </button>
+
+                  {isOpen && (
+                    <div className="border-t px-4 pb-4 pt-3 space-y-2">
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        {entry.weight_kg != null && <div><span className="text-muted-foreground">Weight </span><span className="font-medium">{entry.weight_kg} kg</span></div>}
+                        {entry.sleep_hours != null && <div><span className="text-muted-foreground">Sleep </span><span className="font-medium">{entry.sleep_hours} hrs</span></div>}
+                        {entry.water_intake && <div><span className="text-muted-foreground">Water </span><span className="font-medium">{entry.water_intake}</span></div>}
+                        {entry.activity_level && <div><span className="text-muted-foreground">Activity </span><span className="font-medium capitalize">{entry.activity_level.replace("_", " ")}</span></div>}
+                        {entry.screen_time_hrs != null && <div><span className="text-muted-foreground">Screen </span><span className="font-medium">{entry.screen_time_hrs} hrs</span></div>}
+                        {entry.stress_rating != null && <div><span className="text-muted-foreground">Stress </span><span className="font-medium">{entry.stress_rating}/5</span></div>}
+                      </div>
+                      {ratings.length > 0 && (
+                        <div className="grid grid-cols-2 gap-2 border-t pt-2 text-xs">
+                          {([
+                            ["Sleep quality", entry.sleep_quality_rating], ["Digestion", entry.digestion_rating],
+                            ["Energy", entry.energy_rating], ["Fatigue", entry.fatigue_rating],
+                            ["Skin", entry.skin_rating], ["Hair", entry.hair_rating],
+                            ["Acidity", entry.acidity_rating], ["Bloating", entry.bloating_rating],
+                          ] as [string, number | null][]).filter(([, v]) => v != null).map(([label, val]) => (
+                            <div key={label}><span className="text-muted-foreground">{label} </span><span className="font-medium">{val}/5</span></div>
+                          ))}
+                        </div>
+                      )}
+                      {entry.blood_parameters?.length ? (
+                        <p className="border-t pt-2 text-xs text-muted-foreground">Blood markers: {entry.blood_parameters.join(", ")}</p>
+                      ) : null}
+                      {entry.notes && <p className="border-t pt-2 text-xs text-muted-foreground">{entry.notes}</p>}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       <div className="mb-4 flex items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
           Track your measurements over time.
@@ -208,67 +455,66 @@ function ProgressPage() {
             </div>
           )}
 
-          {/* Charts */}
-          {chartsAvailable.length > 0 && (
-            <div className="space-y-4">
-              <h3 className="font-display text-sm font-semibold text-foreground">Trends</h3>
-              {chartsAvailable.map((k) => {
-                const data = measurements
-                  .filter((m) => m[k] !== null && m[k] !== undefined)
-                  .map((m) => ({
-                    date: new Date(m.measurement_date).toLocaleDateString("en-IN", {
-                      day: "numeric",
-                      month: "short",
-                    }),
-                    value: m[k],
-                  }));
-                if (data.length === 0) return null;
-                return (
-                  <div key={k} className="rounded-2xl border bg-card p-4">
-                    <div className="mb-3 flex items-center gap-2">
-                      <MetricIcon k={k} />
-                      <h4 className="text-sm font-semibold text-foreground">
-                        {METRIC_LABEL[k]} {METRIC_UNIT[k] && `(${METRIC_UNIT[k]})`}
-                      </h4>
-                    </div>
-                    <ResponsiveContainer width="100%" height={180}>
-                      <LineChart data={data}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                        <XAxis
-                          dataKey="date"
-                          tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-                          axisLine={false}
-                          tickLine={false}
-                        />
-                        <YAxis
-                          tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-                          axisLine={false}
-                          tickLine={false}
-                          domain={["auto", "auto"]}
-                        />
-                        <Tooltip
-                          contentStyle={{
-                            background: "var(--card)",
-                            border: "1px solid var(--border)",
-                            borderRadius: "0.75rem",
-                            fontSize: 12,
-                          }}
-                        />
-                        <Line
-                          type="monotone"
-                          dataKey="value"
-                          stroke="var(--primary)"
-                          strokeWidth={2.5}
-                          dot={{ fill: "var(--primary)", r: 3 }}
-                          activeDot={{ r: 5 }}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
+          {/* Trends */}
+          <div className="space-y-4">
+            <h3 className="font-display text-sm font-semibold text-foreground">Trends</h3>
+            <OverallAnalysisCard measurements={measurements} />
+            {chartsAvailable.map((k) => {
+              const data = measurements
+                .filter((m) => m[k] !== null && m[k] !== undefined)
+                .map((m) => ({
+                  date: new Date(m.measurement_date).toLocaleDateString("en-IN", {
+                    day: "numeric",
+                    month: "short",
+                  }),
+                  value: m[k],
+                }));
+              if (data.length === 0) return null;
+              return (
+                <div key={k} className="rounded-2xl border bg-card p-4">
+                  <div className="mb-3 flex items-center gap-2">
+                    <MetricIcon k={k} />
+                    <h4 className="text-sm font-semibold text-foreground">
+                      {METRIC_LABEL[k]} {METRIC_UNIT[k] && `(${METRIC_UNIT[k]})`}
+                    </h4>
                   </div>
-                );
-              })}
-            </div>
-          )}
+                  <ResponsiveContainer width="100%" height={180}>
+                    <LineChart data={data}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                      <XAxis
+                        dataKey="date"
+                        tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <YAxis
+                        tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
+                        axisLine={false}
+                        tickLine={false}
+                        domain={["auto", "auto"]}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          background: "var(--card)",
+                          border: "1px solid var(--border)",
+                          borderRadius: "0.75rem",
+                          fontSize: 12,
+                        }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="value"
+                        stroke="var(--primary)"
+                        strokeWidth={2.5}
+                        dot={{ fill: "var(--primary)", r: 3 }}
+                        activeDot={{ r: 5 }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              );
+            })}
+          </div>
 
           {/* History */}
           <div>
@@ -325,6 +571,18 @@ function ProgressPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {showCheckinForm && clientProfile && (
+        <HealthCheckinForm
+          clientProfile={clientProfile}
+          onClose={() => setShowCheckinForm(false)}
+          onSaved={() => {
+            setShowCheckinForm(false);
+            setLoading(true);
+            loadMeasurements();
+          }}
+        />
       )}
 
       {showForm && clientProfile && (
