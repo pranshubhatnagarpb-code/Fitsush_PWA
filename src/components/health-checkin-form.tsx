@@ -155,7 +155,7 @@ function emptyForm(today: string): FormState {
     weight_kg: null, height_cm: null,
     sleep_quality_rating: null, digestion_rating: null, energy_rating: null,
     fatigue_rating: null, skin_rating: null, hair_rating: null,
-    acidity_rating: null, bloating_rating: null,
+    acidity_rating: null, bloating_rating: null, constipation_rating: null,
     sleep_hours: null, water_intake: null, activity_level: null,
     screen_time_hrs: null, stress_rating: null,
     blood_parameters: [], inflammation_concerns: null,
@@ -255,18 +255,18 @@ export function HealthCheckinForm({ clientProfile, onClose, onSaved }: Props) {
       title: "How are you feeling?",
       content: (
         <div className="space-y-5">
-          <p className="text-xs text-muted-foreground">1 = very poor · 5 = excellent</p>
           {([
-            ["sleep_quality_rating", "Sleep quality"],
-            ["digestion_rating", "Digestion"],
-            ["energy_rating", "Daily energy"],
-            ["fatigue_rating", "Fatigue level"],
-            ["skin_rating", "Skin health"],
-            ["hair_rating", "Hair health"],
-            ["acidity_rating", "Acidity severity"],
-            ["bloating_rating", "Bloating severity"],
-          ] as [keyof FormState, string][]).map(([k, label]) => (
-            <FieldRow key={k} label={label}>
+            ["sleep_quality_rating", "Sleep quality",    "5 = sleeping very well"],
+            ["digestion_rating",     "Digestion",        "5 = excellent digestion"],
+            ["energy_rating",        "Daily energy",     "5 = high energy all day"],
+            ["fatigue_rating",       "Fatigue level",    "1 = always tired · 5 = rarely tired"],
+            ["skin_rating",          "Skin health",      "5 = clear, healthy skin"],
+            ["hair_rating",          "Hair health",      "5 = strong, healthy hair"],
+            ["acidity_rating",        "Acidity severity",     "5 = very severe acidity"],
+            ["bloating_rating",       "Bloating severity",    "5 = very severe bloating"],
+            ["constipation_rating",   "Constipation severity","5 = very severe constipation"],
+          ] as [keyof FormState, string, string][]).map(([k, label, hint]) => (
+            <FieldRow key={k} label={label} hint={hint}>
               <RatingButtons value={form[k] as number | null} onChange={(n) => set(k, n)} />
             </FieldRow>
           ))}

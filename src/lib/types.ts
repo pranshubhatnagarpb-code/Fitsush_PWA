@@ -108,6 +108,7 @@ export interface ProgressEntry {
   hair_rating: number | null;
   acidity_rating: number | null;
   bloating_rating: number | null;
+  constipation_rating: number | null;
   sleep_hours: number | null;
   water_intake: string | null;
   activity_level: string | null;
