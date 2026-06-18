@@ -128,14 +128,18 @@ function openPlanAsPdf(plan: DietPlan, clientProfile: Client | null): void {
 </body>
 </html>`;
 
-  const w = window.open("", "_blank");
-  if (w) {
-    w.document.write(html);
-    w.document.close();
-    w.focus();
-    // Small delay to let styles render before triggering print
-    setTimeout(() => w.print(), 400);
-  }
+  // Use a hidden iframe so print works in PWA standalone mode where
+  // window.open/_blank popups are blocked.
+  const iframe = document.createElement("iframe");
+  iframe.style.cssText = "position:fixed;width:0;height:0;border:none;opacity:0";
+  iframe.srcdoc = html;
+  iframe.onload = () => {
+    setTimeout(() => {
+      iframe.contentWindow?.print();
+      setTimeout(() => document.body.removeChild(iframe), 1000);
+    }, 400);
+  };
+  document.body.appendChild(iframe);
 }
 
 type PdfItem = {
@@ -259,23 +263,36 @@ function DietPlanPage() {
     setBusyKey(item.key);
     setErrorMsg(null);
     try {
-      const downloadOpt =
-        mode === "download" ? { download: item.file_name ?? true } : undefined;
-
       // Try canonical bucket first, then legacy fallback.
       let signed = await supabase.storage
         .from(PRIMARY_BUCKET)
-        .createSignedUrl(item.file_path, 3600, downloadOpt);
+        .createSignedUrl(item.file_path, 3600);
       if (signed.error || !signed.data?.signedUrl) {
         signed = await supabase.storage
           .from(FALLBACK_BUCKET)
-          .createSignedUrl(item.file_path, 3600, downloadOpt);
+          .createSignedUrl(item.file_path, 3600);
       }
       if (signed.error || !signed.data?.signedUrl) {
         setErrorMsg(signed.error?.message ?? "Could not generate download link");
         return;
       }
-      window.open(signed.data.signedUrl, "_blank", "noopener,noreferrer");
+
+      if (mode === "view") {
+        window.open(signed.data.signedUrl, "_blank", "noopener,noreferrer");
+      } else {
+        // Programmatic download — works in PWA standalone mode where
+        // window.open/_blank is blocked by the browser.
+        const res = await fetch(signed.data.signedUrl);
+        const blob = await res.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = blobUrl;
+        a.download = item.file_name ?? "diet-plan.pdf";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(blobUrl);
+      }
     } finally {
       setBusyKey(null);
     }
