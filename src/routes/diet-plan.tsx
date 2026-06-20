@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase";
 import type { DietPlan, ClientDietPlanFile, Client } from "@/lib/types";
 import { PageShell } from "@/components/app-shell";
 import { EmptyState, LoadingSpinner } from "@/components/ui-cards";
-import { Utensils, CalendarDays, FileText, Download, Eye, FileDown } from "lucide-react";
+import { Utensils, CalendarDays, FileText, Download, Eye, FileDown, ShoppingCart, ExternalLink } from "lucide-react";
 
 const PRIMARY_BUCKET = "diet-plan-pdfs";
 const FALLBACK_BUCKET = "diet-pdfs";
@@ -165,6 +165,7 @@ function DietPlanPage() {
   const [loading, setLoading] = useState(true);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [affiliateProducts, setAffiliateProducts] = useState<{ product_name: string; link: string; product_name_normalized: string }[]>([]);
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -254,6 +255,36 @@ function DietPlanPage() {
       );
 
       setPdfs(items);
+
+      // Extract all grocery list items from published AI plans and match affiliate products
+      const groceryItems = new Set<string>();
+      const normGrocery = (s: string) => (s || "").toLowerCase().replace(/[^a-z0-9]+/g, "").trim();
+      for (const p of published) {
+        const ai = p.ai_plan_data as any;
+        if (!ai?.weeklyGroceryList) continue;
+        for (const cat of (ai.weeklyGroceryList as any[])) {
+          for (const item of (cat.items as string[] ?? [])) {
+            const n = normGrocery(item.replace(/\(.*?\)/g, "").replace(/\d+\s*(g|ml|kg|tsp|tbsp|cup|pcs)\b/gi, "").trim());
+            if (n.length >= 2) groceryItems.add(n);
+          }
+        }
+      }
+
+      if (groceryItems.size > 0) {
+        const { data: allProducts } = await supabase
+          .from("affiliate_products" as any)
+          .select("product_name, link, product_name_normalized");
+        if (allProducts) {
+          const matched = (allProducts as any[]).filter((p) => {
+            const pn = p.product_name_normalized as string;
+            return [...groceryItems].some(
+              (g) => g === pn || g.includes(pn) || pn.includes(g)
+            );
+          });
+          setAffiliateProducts(matched);
+        }
+      }
+
       setLoading(false);
     };
     load();
@@ -492,6 +523,30 @@ function DietPlanPage() {
               </div>
             )}
           </div>
+
+          {/* Affiliate product links matched from grocery list */}
+          {affiliateProducts.length > 0 && (
+            <div>
+              <h3 className="mb-3 font-display text-sm font-semibold text-foreground flex items-center gap-2">
+                <ShoppingCart className="h-4 w-4 text-primary" />
+                Shop Recommended Products
+              </h3>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {affiliateProducts.map((p) => (
+                  <a
+                    key={p.product_name_normalized}
+                    href={p.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-between gap-3 rounded-2xl border bg-card px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+                  >
+                    <span className="truncate">{p.product_name}</span>
+                    <ExternalLink className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </PageShell>
