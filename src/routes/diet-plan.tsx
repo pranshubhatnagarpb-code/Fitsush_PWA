@@ -10,7 +10,11 @@ import { Utensils, CalendarDays, FileText, Download, Eye, FileDown, ShoppingCart
 const PRIMARY_BUCKET = "diet-plan-pdfs";
 const FALLBACK_BUCKET = "diet-pdfs";
 
-function openPlanAsPdf(plan: DietPlan, clientProfile: Client | null): void {
+function openPlanAsPdf(
+  plan: DietPlan,
+  clientProfile: Client | null,
+  affiliateProducts: { product_name: string; link: string }[] = [],
+): void {
   const ai = plan.ai_plan_data as Record<string, unknown> | null;
   const clientName = clientProfile?.name ?? "Client";
   const healthConditions: string[] = Array.isArray(clientProfile?.health_conditions)
@@ -80,6 +84,28 @@ function openPlanAsPdf(plan: DietPlan, clientProfile: Client | null): void {
 
       ${ai.supplements ? `<div class="card"><h4>Recommended Supplements</h4><p>${ai.supplements}</p></div>` : ""}
       ${ai.disclaimer ? `<p style="font-size:9px;color:#888;margin-top:20px">${ai.disclaimer}</p>` : ""}
+
+      ${affiliateProducts.length > 0 ? `
+      <div style="margin-top:24px;page-break-inside:avoid">
+        <h2 style="color:#b45309;font-size:15px;border-bottom:2px solid #f59e0b;padding-bottom:6px;margin-bottom:12px">🛒 Shop Recommended Products</h2>
+        <table style="width:100%;border-collapse:collapse;font-size:10px">
+          <thead>
+            <tr>
+              <th style="background:#f59e0b;color:white;padding:7px 10px;text-align:left;width:40%">Product</th>
+              <th style="background:#f59e0b;color:white;padding:7px 10px;text-align:left">Buy Link</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${affiliateProducts.map((p, i) => `
+              <tr style="background:${i % 2 === 0 ? "#fffbeb" : "#ffffff"}">
+                <td style="padding:7px 10px;border-bottom:1px solid #fde68a;font-weight:500">${p.product_name}</td>
+                <td style="padding:7px 10px;border-bottom:1px solid #fde68a">
+                  <a href="${p.link}" style="color:#b45309;text-decoration:underline;word-break:break-all">${p.link}</a>
+                </td>
+              </tr>`).join("")}
+          </tbody>
+        </table>
+      </div>` : ""}
     `;
   } else {
     // Fallback for non-AI plans: just show instructions
@@ -504,7 +530,7 @@ function DietPlanPage() {
 
                       {/* Always-available client-side PDF generation */}
                       <button
-                        onClick={() => openPlanAsPdf(plan, clientProfile)}
+                        onClick={() => openPlanAsPdf(plan, clientProfile, affiliateProducts)}
                         className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
                       >
                         <Download className="h-4 w-4" />
