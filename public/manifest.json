@@ -1,10 +1,10 @@
 {
-  "name": "MKR Care — Client Portal",
-  "short_name": "MKR Care",
+  "name": "Fitsush — Client Portal",
+  "short_name": "Fitsush",
   "start_url": "/dashboard",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#0d9488",
+  "theme_color": "#FF4D06",
   "icons": [
     {
       "src": "/favicon.ico",

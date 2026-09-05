@@ -130,6 +130,11 @@ export interface ProgressEntry {
   memory_rating: number | null;
   focus_rating: number | null;
   appetite: string | null;
+  breastfed: boolean | null;
+  breastfeeding_duration_months: number | null;
+  formula_fed: boolean | null;
+  solids_start_age_months: number | null;
+  feeding_difficulties: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string;

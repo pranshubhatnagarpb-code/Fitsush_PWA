@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { useAuth } from "@/hooks/use-auth";
-import { Leaf } from "lucide-react";
+import fitsushLogo from "@/assets/fitsush-logo.webp";
 
 export const Route = createFileRoute("/login")({
   component: LoginPage,
@@ -59,10 +59,10 @@ function LoginPage() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-6">
       <div className="mb-8 flex flex-col items-center">
-        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary">
-          <Leaf className="h-8 w-8 text-primary-foreground" />
+        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow-sm">
+          <img src={fitsushLogo} alt="Fitsush" className="h-10 w-10 object-contain" />
         </div>
-        <h1 className="font-display text-2xl font-bold text-foreground">NutriCare</h1>
+        <h1 className="font-display text-2xl font-bold text-foreground">Fitsush</h1>
         <p className="mt-1 text-sm text-muted-foreground">Your nutrition journey, simplified</p>
       </div>
 

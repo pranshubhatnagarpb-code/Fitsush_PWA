@@ -126,20 +126,20 @@ function openPlanAsPdf(
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
     body{font-family:'Segoe UI',sans-serif;padding:25px 35px;color:#334155;font-size:11px;line-height:1.5}
-    .header{text-align:center;margin-bottom:20px;border-bottom:2px solid #00a896;padding-bottom:15px}
-    .header h1{color:#00a896;font-size:20px;margin-bottom:5px}
+    .header{text-align:center;margin-bottom:20px;border-bottom:2px solid #FF4D06;padding-bottom:15px}
+    .header h1{color:#FF4D06;font-size:20px;margin-bottom:5px}
     .header p{color:#64748b;font-size:12px}
-    .badge{background:#00a896;color:white;padding:2px 8px;border-radius:10px;font-size:10px;margin-left:6px}
+    .badge{background:#FF4D06;color:white;padding:2px 8px;border-radius:10px;font-size:10px;margin-left:6px}
     .badge-blue{background:#e3f2fd;color:#1976d2;padding:2px 6px;border-radius:10px;font-size:9px;margin-right:4px}
-    .card{background:#f0fdff;border:1px solid #b3e5e0;border-radius:8px;padding:14px;margin-bottom:16px}
+    .card{background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;padding:14px;margin-bottom:16px}
     .card.green{background:#f0fdf4;border-color:#bbf7d0}
     .card.yellow{background:#fefce8;border-color:#fde047}
-    .card h3,.card h4{color:#0d7477;font-size:13px;margin-bottom:8px}
+    .card h3,.card h4{color:#C2410C;font-size:13px;margin-bottom:8px}
     .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-    .intro{background:#f0fdff;border-left:4px solid #00a896;padding:12px;margin-bottom:16px;border-radius:4px;font-style:italic}
-    .section{color:#00a896;font-size:14px;font-weight:bold;margin:20px 0 10px;border-bottom:1px solid #b3e5e0;padding-bottom:4px}
+    .intro{background:#FFF7ED;border-left:4px solid #FF4D06;padding:12px;margin-bottom:16px;border-radius:4px;font-style:italic}
+    .section{color:#FF4D06;font-size:14px;font-weight:bold;margin:20px 0 10px;border-bottom:1px solid #FED7AA;padding-bottom:4px}
     table{width:100%;border-collapse:collapse;margin-bottom:16px;font-size:10px}
-    th{background:#00a896;color:white;padding:7px;text-align:left}
+    th{background:#FF4D06;color:white;padding:7px;text-align:left}
     td{padding:7px;border-bottom:1px solid #e2e8f0;vertical-align:top}
     tr:nth-child(even){background:#f8fafc}
     ul{margin-left:18px}
@@ -150,7 +150,7 @@ function openPlanAsPdf(
 </head>
 <body>
   ${body}
-  <div class="footer">© ${new Date().getFullYear()} Dr. Malika Kabra Rathi — Personalized Nutrition Plan</div>
+  <div class="footer">© ${new Date().getFullYear()} Fitsush — Personalized Nutrition Plan</div>
 </body>
 </html>`;
 
