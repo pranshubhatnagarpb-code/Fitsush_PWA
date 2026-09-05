@@ -20,6 +20,15 @@ dist-ssr
 .wrangler/
 .dev.vars
 
+# Environment files (never commit secrets)
+.env
+.env/
+.env.*
+!.env.example
+
+# Editor local-history snapshots (can contain stale copies of the above)
+.history/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
