@@ -2,12 +2,19 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/hooks/use-auth";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { supabase } from "@/lib/supabase";
-import type { ClientMeasurement, ProgressEntry } from "@/lib/types";
+import type { BodyMeasurement, ProgressEntry } from "@/lib/types";
 import { PageShell } from "@/components/app-shell";
 import { EmptyState, LoadingSpinner } from "@/components/ui-cards";
-import { TrendingUp, Scale, Activity, Ruler, Percent, Plus, HeartPulse } from "lucide-react";
+import { TrendingUp, Scale, Activity, Ruler, Percent, Plus, HeartPulse, Download, Loader2, Bell, BellOff } from "lucide-react";
 import { MeasurementForm } from "@/components/measurement-form";
 import { HealthCheckinForm } from "@/components/health-checkin-form";
+import { downloadProgressSummaryPdf } from "@/lib/progressSummaryPdf";
+import {
+  isPushSupported,
+  getNotificationPermission,
+  isSubscribedToWeeklyReminders,
+  subscribeToWeeklyReminders,
+} from "@/lib/pushNotifications";
 import {
   LineChart,
   Line,
@@ -29,7 +36,7 @@ export const Route = createFileRoute("/progress")({
 type MetricKey =
   | "weight"
   | "bmi"
-  | "body_fat_percentage"
+  | "body_fat_percent"
   | "waist"
   | "hip"
   | "chest"
@@ -40,7 +47,7 @@ type MetricKey =
 const METRIC_LABEL: Record<MetricKey, string> = {
   weight: "Weight",
   bmi: "BMI",
-  body_fat_percentage: "Body Fat",
+  body_fat_percent: "Body Fat",
   waist: "Waist",
   hip: "Hip",
   chest: "Chest",
@@ -52,7 +59,7 @@ const METRIC_LABEL: Record<MetricKey, string> = {
 const METRIC_UNIT: Record<MetricKey, string> = {
   weight: "kg",
   bmi: "",
-  body_fat_percentage: "%",
+  body_fat_percent: "%",
   waist: "cm",
   hip: "cm",
   chest: "cm",
@@ -61,12 +68,12 @@ const METRIC_UNIT: Record<MetricKey, string> = {
   neck: "cm",
 };
 
-const SUMMARY_METRICS: MetricKey[] = ["weight", "bmi", "waist", "hip", "body_fat_percentage"];
+const SUMMARY_METRICS: MetricKey[] = ["weight", "bmi", "waist", "hip", "body_fat_percent"];
 const CHART_METRICS: MetricKey[] = ["weight", "bmi", "waist"];
 
 // Lower is better for these metrics
 const LOWER_IS_BETTER: MetricKey[] = [
-  "weight", "bmi", "body_fat_percentage", "waist", "hip", "chest", "thigh", "arm", "neck",
+  "weight", "bmi", "body_fat_percent", "waist", "hip", "chest", "thigh", "arm", "neck",
 ];
 
 interface MetricTrend {
@@ -78,7 +85,7 @@ interface MetricTrend {
   positive: boolean; // true = improvement
 }
 
-function buildTrends(measurements: ClientMeasurement[]): MetricTrend[] {
+function buildTrends(measurements: BodyMeasurement[]): MetricTrend[] {
   if (measurements.length < 2) return [];
   const first = measurements[0];
   const last = measurements[measurements.length - 1];
@@ -95,7 +102,7 @@ function buildTrends(measurements: ClientMeasurement[]): MetricTrend[] {
   return trends;
 }
 
-function OverallAnalysisCard({ measurements }: { measurements: ClientMeasurement[] }) {
+function OverallAnalysisCard({ measurements }: { measurements: BodyMeasurement[] }) {
   const trends = buildTrends(measurements);
 
   if (trends.length === 0) {
@@ -212,7 +219,7 @@ function OverallAnalysisCard({ measurements }: { measurements: ClientMeasurement
 const HISTORY_METRICS: MetricKey[] = [
   "weight",
   "bmi",
-  "body_fat_percentage",
+  "body_fat_percent",
   "waist",
   "hip",
   "chest",
@@ -224,19 +231,57 @@ const HISTORY_METRICS: MetricKey[] = [
 function MetricIcon({ k }: { k: MetricKey }): ReactNode {
   if (k === "weight") return <Scale className="h-4 w-4" />;
   if (k === "bmi") return <Activity className="h-4 w-4" />;
-  if (k === "body_fat_percentage") return <Percent className="h-4 w-4" />;
+  if (k === "body_fat_percent") return <Percent className="h-4 w-4" />;
   return <Ruler className="h-4 w-4" />;
 }
 
 function ProgressPage() {
   const { clientProfile, isAuthenticated, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
-  const [measurements, setMeasurements] = useState<ClientMeasurement[]>([]);
+  const [measurements, setMeasurements] = useState<BodyMeasurement[]>([]);
   const [progressEntries, setProgressEntries] = useState<ProgressEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [showCheckinForm, setShowCheckinForm] = useState(false);
   const [expandedEntry, setExpandedEntry] = useState<string | null>(null);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission | "unsupported">("unsupported");
+  const [isReminderSubscribed, setIsReminderSubscribed] = useState(false);
+  const [isEnablingReminders, setIsEnablingReminders] = useState(false);
+  const [reminderError, setReminderError] = useState<string | null>(null);
+
+  const handleDownloadSummary = async () => {
+    if (!clientProfile) return;
+    setIsDownloading(true);
+    setDownloadError(null);
+    try {
+      await downloadProgressSummaryPdf(clientProfile.id);
+    } catch (e) {
+      setDownloadError(e instanceof Error ? e.message : "Failed to generate your progress summary.");
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  useEffect(() => {
+    setNotifPermission(getNotificationPermission());
+    isSubscribedToWeeklyReminders().then(setIsReminderSubscribed);
+  }, []);
+
+  const handleEnableReminders = async () => {
+    if (!clientProfile) return;
+    setIsEnablingReminders(true);
+    setReminderError(null);
+    const { error } = await subscribeToWeeklyReminders(clientProfile.id);
+    setIsEnablingReminders(false);
+    setNotifPermission(getNotificationPermission());
+    if (error) {
+      setReminderError(error);
+      return;
+    }
+    setIsReminderSubscribed(true);
+  };
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -248,7 +293,7 @@ function ProgressPage() {
     if (!clientProfile) return;
     const [measRes, entriesRes] = await Promise.all([
       supabase
-        .from("client_measurements")
+        .from("body_measurements")
         .select("*")
         .eq("client_id", clientProfile.id)
         .order("measurement_date", { ascending: true }),
@@ -258,7 +303,7 @@ function ProgressPage() {
         .eq("client_id", clientProfile.id)
         .order("entry_date", { ascending: false }),
     ]);
-    setMeasurements((measRes.data ?? []) as ClientMeasurement[]);
+    setMeasurements((measRes.data ?? []) as BodyMeasurement[]);
     setProgressEntries((entriesRes.data ?? []) as ProgressEntry[]);
     setLoading(false);
   }, [clientProfile]);
@@ -283,6 +328,52 @@ function ProgressPage() {
 
   return (
     <PageShell title="My Progress">
+      {/* Progress summary download */}
+      {clientProfile && (
+        <div className="mb-6">
+          <button
+            type="button"
+            onClick={handleDownloadSummary}
+            disabled={isDownloading}
+            className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-primary bg-primary/5 px-3 py-2.5 text-xs font-semibold text-primary hover:bg-primary/10 disabled:opacity-50"
+          >
+            {isDownloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            {isDownloading ? "Generating your summary…" : "Download Progress Summary"}
+          </button>
+          {downloadError && (
+            <p className="mt-2 text-xs text-destructive">{downloadError}</p>
+          )}
+        </div>
+      )}
+
+      {/* Weekly reminder opt-in */}
+      {clientProfile && notifPermission !== "unsupported" && (
+        <div className="mb-6">
+          {isReminderSubscribed ? (
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Bell className="h-3.5 w-3.5" /> Weekly reminders to log your progress are on.
+            </p>
+          ) : notifPermission === "denied" ? (
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <BellOff className="h-3.5 w-3.5" /> Notifications are blocked for this site in your browser/device settings — enable them there to get weekly reminders.
+            </p>
+          ) : (
+            <button
+              type="button"
+              onClick={handleEnableReminders}
+              disabled={isEnablingReminders}
+              className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-primary/40 px-3 py-2.5 text-xs font-semibold text-primary hover:bg-primary/5 disabled:opacity-50"
+            >
+              {isEnablingReminders ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bell className="h-4 w-4" />}
+              {isEnablingReminders ? "Enabling…" : "Get a weekly reminder to log your measurements"}
+            </button>
+          )}
+          {reminderError && (
+            <p className="mt-2 text-xs text-destructive">{reminderError}</p>
+          )}
+        </div>
+      )}
+
       {/* Health Check-in section */}
       <div className="mb-6">
         <div className="mb-3 flex items-center justify-between">
@@ -526,7 +617,7 @@ function ProgressPage() {
                 const visibleMetrics = HISTORY_METRICS.filter(
                   (k) => m[k] !== null && m[k] !== undefined
                 );
-                const note = m.measurement_notes ?? m.notes ?? null;
+                const note = m.notes ?? null;
                 return (
                   <div
                     key={m.id}

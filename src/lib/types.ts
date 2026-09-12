@@ -49,21 +49,25 @@ export interface Appointment {
   updated_at: string;
 }
 
-export interface ClientMeasurement {
+export interface BodyMeasurement {
   id: string;
   client_id: string;
   measurement_date: string;
   weight: number | null;
   bmi: number | null;
-  body_fat_percentage: number | null;
+  body_fat_percent: number | null;
+  visceral_fat: number | null;
+  muscle_mass: number | null;
+  body_age: number | null;
+  resting_metabolism: number | null;
+  neck: number | null;
+  chest: number | null;
+  tummy: number | null;
   waist: number | null;
   hip: number | null;
-  chest: number | null;
   thigh: number | null;
   arm: number | null;
-  neck: number | null;
-  measurement_notes: string | null;
-  notes?: string | null;
+  notes: string | null;
   created_at: string;
   updated_at: string;
 }

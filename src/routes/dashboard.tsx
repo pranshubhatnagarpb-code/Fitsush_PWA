@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/hooks/use-auth";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import type { Appointment, DietPlan, ClientFeedback, ClientMeasurement } from "@/lib/types";
+import type { Appointment, DietPlan, ClientFeedback, BodyMeasurement } from "@/lib/types";
 import { PageShell } from "@/components/app-shell";
 import { SummaryCard, LoadingSpinner } from "@/components/ui-cards";
 import { Scale, Utensils, Calendar, MessageSquare, Sparkles } from "lucide-react";
@@ -17,7 +17,7 @@ function DashboardPage() {
   const [activePlan, setActivePlan] = useState<DietPlan | null>(null);
   const [nextAppointment, setNextAppointment] = useState<Appointment | null>(null);
   const [latestFeedback, setLatestFeedback] = useState<ClientFeedback | null>(null);
-  const [latestMeasurement, setLatestMeasurement] = useState<ClientMeasurement | null>(null);
+  const [latestMeasurement, setLatestMeasurement] = useState<BodyMeasurement | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -54,7 +54,7 @@ function DashboardPage() {
           .limit(1)
           .maybeSingle(),
         supabase
-          .from("client_measurements")
+          .from("body_measurements")
           .select("*")
           .eq("client_id", clientProfile.id)
           .order("measurement_date", { ascending: false })
@@ -64,7 +64,7 @@ function DashboardPage() {
       setActivePlan(planRes.data);
       setNextAppointment(apptRes.data);
       setLatestFeedback(feedbackRes.data);
-      setLatestMeasurement(measurementRes.data as ClientMeasurement | null);
+      setLatestMeasurement(measurementRes.data as BodyMeasurement | null);
       setLoading(false);
     };
     fetchData();
