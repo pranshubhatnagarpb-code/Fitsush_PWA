@@ -11,6 +11,7 @@ import {
   fetchProgressInsightsNarrative,
   CHART_METRIC_KEYS,
   type MetricTrend,
+  type BloodMetricTrend,
   type ProgressSummaryData,
 } from './progressSummary';
 
@@ -57,6 +58,24 @@ function buildFallbackNarrative(data: ProgressSummaryData): string {
     parts.push(`${worsened.length === 1 ? 'One metric hasn\'t' : `${worsened.length} metrics haven't`} moved in the target direction yet — worth a check-in.`);
   }
   parts.push('Keep up the consistent tracking — steady logging makes trends like these easy to see.');
+
+  const bloodTrended = data.bloodMetrics.filter((m) => m.hasTrend);
+  if (bloodTrended.length > 0) {
+    const improved = bloodTrended.filter((m) => m.direction === 'improved');
+    const worsened = bloodTrended.filter((m) => m.direction === 'worsened');
+    if (improved.length > 0) {
+      parts.push(`On blood work, ${improved.map((m) => m.label.toLowerCase()).join(', ')} moved into the normal range since the first report.`);
+    }
+    if (worsened.length > 0) {
+      parts.push(`${worsened.map((m) => m.label).join(', ')} moved out of the normal range and may be worth flagging to the client.`);
+    }
+    if (improved.length === 0 && worsened.length === 0) {
+      parts.push('Tracked blood markers have stayed broadly stable across reports.');
+    }
+  } else if (data.bloodReportCount > 0) {
+    parts.push(`Only one blood report has been logged so far (${formatDate(data.bloodLatestDate)}) — repeat testing will let this report start showing blood trends too.`);
+  }
+
   return parts.join(' ');
 }
 
@@ -123,6 +142,24 @@ function deltaBadge(m: MetricTrend): string {
   if (!m.hasTrend) return `<span style="font-size:10px;color:#94a3b8;">First entry</span>`;
   const sign = m.change > 0 ? '+' : '';
   const color = m.change === 0 ? '#64748b' : m.improved ? '#16a34a' : '#dc2626';
+  return `<span style="font-size:11px;font-weight:600;color:${color};">${sign}${m.change}${m.unit} (${sign}${m.pctChange}%)</span>`;
+}
+
+function statusBadge(status: BloodMetricTrend['firstStatus']): string {
+  const colors: Record<string, string> = {
+    normal: '#16a34a',
+    low: '#d97706',
+    high: '#dc2626',
+    unknown: '#94a3b8',
+  };
+  const labels: Record<string, string> = { normal: 'Normal', low: 'Low', high: 'High', unknown: '—' };
+  return `<span style="font-size:10px;font-weight:600;color:${colors[status]};">${labels[status]}</span>`;
+}
+
+function bloodDeltaBadge(m: BloodMetricTrend): string {
+  if (!m.hasTrend) return `<span style="font-size:10px;color:#94a3b8;">First report</span>`;
+  const sign = m.change > 0 ? '+' : '';
+  const color = m.direction === 'improved' ? '#16a34a' : m.direction === 'worsened' ? '#dc2626' : '#64748b';
   return `<span style="font-size:11px;font-weight:600;color:${color};">${sign}${m.change}${m.unit} (${sign}${m.pctChange}%)</span>`;
 }
 
@@ -212,6 +249,26 @@ function buildHtml(data: ProgressSummaryData, narrative: string, logoDataUrl: st
     </tbody>
   </table>` : `
   <p style="margin-top:16px;color:#64748b;">No body measurements have been logged yet — once entries are added, this report will show trends since ${formatDate(data.sinceDate)}.</p>
+  `}
+
+  <h3 class="section-title">Blood Report Trends</h3>
+  ${data.bloodMetrics.length > 0 ? `
+  <p style="font-size:10px;color:#64748b;margin-bottom:6px;">${data.bloodReportCount} report${data.bloodReportCount === 1 ? '' : 's'} logged &middot; First: ${formatDate(data.bloodSinceDate)} &middot; Latest: ${formatDate(data.bloodLatestDate)}</p>
+  <table>
+    <thead><tr><th>Marker</th><th>First</th><th>Latest</th><th>Change</th><th>Status</th></tr></thead>
+    <tbody>
+      ${data.bloodMetrics.map((m) => `
+        <tr>
+          <td>${m.label}</td>
+          <td>${m.first}${m.unit}</td>
+          <td>${m.latest}${m.unit}</td>
+          <td>${bloodDeltaBadge(m)}</td>
+          <td>${statusBadge(m.latestStatus)}</td>
+        </tr>
+      `).join('')}
+    </tbody>
+  </table>` : `
+  <p style="margin-top:6px;color:#64748b;">No blood reports have been logged yet for this client.</p>
   `}
 
   <div class="footer">© ${new Date().getFullYear()} Fitsush &middot; Generated ${formatDate(new Date().toISOString())} &middot; AI-assisted summary, not medical advice.</div>
