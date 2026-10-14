@@ -1,5 +1,6 @@
 import { Outlet, Link, createRootRoute } from "@tanstack/react-router";
 import { AuthProvider } from "@/hooks/use-auth";
+import { InstallPrompt } from "@/components/install-prompt";
 import "../styles.css";
 
 function NotFoundComponent() {
@@ -41,6 +42,7 @@ function RootComponent() {
   return (
     <AuthProvider>
       <Outlet />
+      <InstallPrompt />
     </AuthProvider>
   );
 }
