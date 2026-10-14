@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase";
 import type { ClientBloodReport } from "@/lib/types";
 import { PageShell } from "@/components/app-shell";
 import { EmptyState, LoadingSpinner } from "@/components/ui-cards";
-import { FlaskConical, Plus, X, FileText, AlertCircle } from "lucide-react";
+import { FlaskConical, Plus, X, FileText } from "lucide-react";
 import {
   LineChart,
   Line,
@@ -112,14 +112,6 @@ function BloodReportsPage() {
             Add
           </button>
         )}
-      </div>
-
-      <div className="mb-5 flex items-start gap-2 rounded-xl border bg-muted/50 px-3 py-2.5 text-xs text-muted-foreground">
-        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-        <p>
-          PDF upload and auto-extraction will be enabled once the backend storage
-          fields are added. For now you can log key values manually.
-        </p>
       </div>
 
       {loading ? (

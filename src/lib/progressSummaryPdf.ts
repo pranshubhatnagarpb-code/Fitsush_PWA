@@ -291,13 +291,28 @@ async function fetchLogoDataUrl(): Promise<string> {
 }
 
 async function renderHtmlToPdf(html: string, filename: string): Promise<void> {
-  const container = document.createElement('div');
-  container.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;background:white;z-index:-1;';
-  container.innerHTML = html;
+  // Rendered inside an isolated iframe rather than a div in the app's own
+  // document: html2canvas reads the computed styles of the document it
+  // captures, and it can't parse the oklch() colors Tailwind v4 puts on the
+  // host page ("Attempting to parse an unsupported color function"). The
+  // iframe only contains this report's own hex-colored CSS. It also stops
+  // the report's `*`/`body` rules leaking onto the app while it's mounted.
+  const container = document.createElement('iframe');
+  container.setAttribute('aria-hidden', 'true');
+  container.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;height:1123px;border:0;background:white;z-index:-1;';
+  const loaded = new Promise<void>((resolve) => {
+    container.onload = () => resolve();
+  });
+  container.srcdoc = html;
   document.body.appendChild(container);
 
   try {
-    const canvas = await html2canvas(container, { scale: 2, useCORS: true, logging: false, width: 794 });
+    await loaded;
+    const doc = container.contentDocument;
+    if (!doc) throw new Error('Could not prepare the report for download.');
+    container.style.height = `${doc.documentElement.scrollHeight}px`;
+
+    const canvas = await html2canvas(doc.body, { scale: 2, useCORS: true, logging: false, width: 794, windowWidth: 794 });
 
     const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     const pageW = pdf.internal.pageSize.getWidth();
