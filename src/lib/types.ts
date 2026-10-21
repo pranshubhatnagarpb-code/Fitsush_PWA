@@ -63,6 +63,7 @@ export interface BodyMeasurement {
   neck: number | null;
   chest: number | null;
   tummy: number | null;
+  shoulder: number | null;
   waist: number | null;
   hip: number | null;
   thigh: number | null;

@@ -72,6 +72,7 @@ export type BloodMarkerKey =
   // Minerals
   | 'magnesium'
   | 'selenium'
+  | 'zinc'
   // Enzymes
   | 'ldh'
   // Thyroid
@@ -207,6 +208,7 @@ export const BLOOD_MARKERS: BloodMarkerDef[] = [
   // Minerals
   { key: 'magnesium', label: 'Magnesium', unit: 'mg/dL', refLow: 2, refHigh: 2.3, group: 'Minerals', aliases: ['magnesium', 'mg', 'serum magnesium'] },
   { key: 'selenium', label: 'Selenium', unit: 'µg/L', refLow: 90, refHigh: 140, group: 'Minerals', aliases: ['selenium'] },
+  { key: 'zinc', label: 'Zinc', unit: 'µg/dL', refLow: 90, refHigh: 110, group: 'Minerals', aliases: ['zinc', 'zn', 'serum zinc', 'plasma zinc'] },
   // Enzymes
   { key: 'ldh', label: 'LDH', unit: 'U/L', refLow: 140, refHigh: 175, group: 'Enzymes', aliases: ['ldh', 'lactate dehydrogenase', 'lactic dehydrogenase'] },
   // Thyroid
