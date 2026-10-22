@@ -309,13 +309,13 @@ function buildManualPlanHtml(plan: any, recipes: RecipeRow[], logoDataUrl: strin
     .client-grid span{font-weight:bold;color:#555}
     .condition-badge{display:inline-block;background:#e3f2fd;color:#1976d2;padding:2px 6px;border-radius:10px;font-size:9px;margin-right:4px;margin-bottom:4px}
     .intro{background:#f9f9f9;padding:15px;border-radius:8px;margin-bottom:20px;border-left:4px solid #FF4D06}
-    table{width:100%;border-collapse:collapse;margin-bottom:20px;font-size:10px}
+    table{width:100%;border-collapse:collapse;margin-bottom:20px;font-size:12px;line-height:1.45}
     th{background:#FF4D06;color:white;padding:8px;text-align:left;font-weight:bold}
     td{padding:8px;border-bottom:1px solid #ddd;vertical-align:top}
     tr:nth-child(even){background:#f9f9f9}
     .section-title{color:#FF4D06;font-size:16px;font-weight:bold;margin:25px 0 15px;border-bottom:1px solid #FED7AA;padding-bottom:5px}
     .day-title{font-size:14px;color:#FF4D06;font-weight:700;margin:18px 0 8px;padding-bottom:4px;border-bottom:1px solid #FED7AA}
-    .day-notes{font-size:10px;color:#555;margin:-12px 0 16px;padding:6px 8px;background:#fff7ed;border-radius:4px}
+    .day-notes{font-size:11px;color:#555;margin:-12px 0 16px;padding:6px 8px;background:#fff7ed;border-radius:4px}
     tbody tr:nth-child(even){background:transparent}
     .footer{text-align:center;margin-top:30px;padding-top:15px;border-top:1px solid #ddd;font-size:9px;color:#999}
     @media print{body{padding:15px}}
@@ -522,7 +522,7 @@ function buildRichAIPlanHtml(
     .affirmations h3{color:#f39c12;font-size:14px;margin-bottom:10px}
     .affirmations ul{margin-left:20px}
     .affirmations li{margin-bottom:5px}
-    table{width:100%;border-collapse:collapse;margin-bottom:20px;font-size:10px}
+    table{width:100%;border-collapse:collapse;margin-bottom:20px;font-size:12px;line-height:1.45}
     th{background:#FF4D06;color:white;padding:8px;text-align:left;font-weight:bold}
     td{padding:8px;border-bottom:1px solid #ddd;vertical-align:top}
     tr:nth-child(even){background:#f9f9f9}
