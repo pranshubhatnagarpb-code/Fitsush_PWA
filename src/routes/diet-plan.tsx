@@ -5,168 +5,11 @@ import { supabase } from "@/lib/supabase";
 import type { DietPlan, ClientDietPlanFile, Client } from "@/lib/types";
 import { PageShell } from "@/components/app-shell";
 import { EmptyState, LoadingSpinner } from "@/components/ui-cards";
-import { Utensils, CalendarDays, FileText, Download, Eye, FileDown, ShoppingCart, ExternalLink } from "lucide-react";
+import { Utensils, CalendarDays, FileText, Download, Eye, FileDown, ShoppingCart, ExternalLink, Loader2 } from "lucide-react";
+import { printDietPlan } from "@/lib/dietPlanPdf";
 
 const PRIMARY_BUCKET = "diet-plan-pdfs";
 const FALLBACK_BUCKET = "diet-pdfs";
-
-function openPlanAsPdf(
-  plan: DietPlan,
-  clientProfile: Client | null,
-  affiliateProducts: { product_name: string; link: string }[] = [],
-): void {
-  const ai = plan.ai_plan_data as Record<string, unknown> | null;
-  const clientName = clientProfile?.name ?? "Client";
-  const healthConditions: string[] = Array.isArray(clientProfile?.health_conditions)
-    ? (clientProfile.health_conditions as string[])
-    : clientProfile?.health_conditions
-    ? [clientProfile.health_conditions]
-    : [];
-
-  let body = "";
-
-  if (ai) {
-    const dayGroups = (ai.dayGroups as any[]) ?? [];
-    const affirmations = (ai.affirmations as string[]) ?? [];
-    const importantNotes = (ai.importantNotes as string[]) ?? [];
-
-    body = `
-      <div class="header">
-        <h1>${ai.planName ?? plan.plan_name ?? "Diet Plan"}</h1>
-        <p>Personalized plan for ${clientName}
-          ${plan.week_number ? `<span class="badge">Week ${plan.week_number}</span>` : ""}
-        </p>
-      </div>
-
-      <div class="card">
-        <h3>Client Details</h3>
-        <div class="grid2">
-          <div><b>Name:</b> ${clientName}</div>
-          <div><b>Goal:</b> ${clientProfile?.goal ?? "Not specified"}</div>
-          ${clientProfile?.height ? `<div><b>Height:</b> ${clientProfile.height} cm</div>` : ""}
-          ${clientProfile?.weight ? `<div><b>Weight:</b> ${clientProfile.weight} kg</div>` : ""}
-        </div>
-        ${healthConditions.length > 0 ? `<p style="margin-top:8px"><b>Health Conditions:</b> ${healthConditions.map(c => `<span class="badge-blue">${c}</span>`).join(" ")}</p>` : ""}
-      </div>
-
-      ${ai.introMessage ? `<div class="intro"><p>${String(ai.introMessage).replace(/\n/g, "<br/>")}</p></div>` : ""}
-
-      ${affirmations.length > 0 ? `
-      <div class="card green">
-        <h3>Affirmations</h3>
-        <ul>${affirmations.map(a => `<li>${a}</li>`).join("")}</ul>
-      </div>` : ""}
-
-      ${dayGroups.map((g: any) => `
-        <h3 class="section">${g.label ?? ""}${g.dates ? ` <span style="font-weight:normal;font-size:12px;color:#666">(${g.dates})</span>` : ""}</h3>
-        <table>
-          <thead><tr><th>Period</th><th>Time</th><th>Food Plan</th><th>Alternative</th><th>Notes</th></tr></thead>
-          <tbody>
-            ${((g.meals ?? []) as any[]).map(m => `
-              <tr>
-                <td>${m.period ?? "-"}</td>
-                <td>${m.time ?? "-"}</td>
-                <td>${m.foodPlan ?? "-"}</td>
-                <td>${m.alternative ?? "-"}</td>
-                <td>${m.notes ?? "-"}</td>
-              </tr>`).join("")}
-          </tbody>
-        </table>
-      `).join("")}
-
-      ${ai.servingSize ? `<div class="card"><b>Serving Size:</b> ${ai.servingSize}</div>` : ""}
-
-      ${importantNotes.length > 0 ? `
-      <div class="card yellow">
-        <h4>Important Notes</h4>
-        <ul>${importantNotes.map(n => `<li>${n}</li>`).join("")}</ul>
-      </div>` : ""}
-
-      ${ai.supplements ? `<div class="card"><h4>Recommended Supplements</h4><p>${ai.supplements}</p></div>` : ""}
-      ${ai.disclaimer ? `<p style="font-size:9px;color:#888;margin-top:20px">${ai.disclaimer}</p>` : ""}
-
-      ${affiliateProducts.length > 0 ? `
-      <div style="margin-top:24px;page-break-inside:avoid">
-        <h2 style="color:#b45309;font-size:15px;border-bottom:2px solid #f59e0b;padding-bottom:6px;margin-bottom:12px">🛒 Shop Recommended Products</h2>
-        <table style="width:100%;border-collapse:collapse;font-size:10px">
-          <thead>
-            <tr>
-              <th style="background:#f59e0b;color:white;padding:7px 10px;text-align:left;width:40%">Product</th>
-              <th style="background:#f59e0b;color:white;padding:7px 10px;text-align:left">Buy Link</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${affiliateProducts.map((p, i) => `
-              <tr style="background:${i % 2 === 0 ? "#fffbeb" : "#ffffff"}">
-                <td style="padding:7px 10px;border-bottom:1px solid #fde68a;font-weight:500">${p.product_name}</td>
-                <td style="padding:7px 10px;border-bottom:1px solid #fde68a">
-                  <a href="${p.link}" style="color:#b45309;text-decoration:underline;word-break:break-all">${p.link}</a>
-                </td>
-              </tr>`).join("")}
-          </tbody>
-        </table>
-      </div>` : ""}
-    `;
-  } else {
-    // Fallback for non-AI plans: just show instructions
-    body = `
-      <div class="header">
-        <h1>${plan.plan_name ?? "Diet Plan"}</h1>
-        <p>For ${clientName}</p>
-      </div>
-      ${plan.instructions ? `<div class="intro"><p>${plan.instructions.replace(/\n/g, "<br/>")}</p></div>` : ""}
-    `;
-  }
-
-  const html = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8"/>
-  <title>${plan.plan_name ?? "Diet Plan"}</title>
-  <style>
-    *{margin:0;padding:0;box-sizing:border-box}
-    body{font-family:'Segoe UI',sans-serif;padding:25px 35px;color:#334155;font-size:11px;line-height:1.5}
-    .header{text-align:center;margin-bottom:20px;border-bottom:2px solid #FF4D06;padding-bottom:15px}
-    .header h1{color:#FF4D06;font-size:20px;margin-bottom:5px}
-    .header p{color:#64748b;font-size:12px}
-    .badge{background:#FF4D06;color:white;padding:2px 8px;border-radius:10px;font-size:10px;margin-left:6px}
-    .badge-blue{background:#e3f2fd;color:#1976d2;padding:2px 6px;border-radius:10px;font-size:9px;margin-right:4px}
-    .card{background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;padding:14px;margin-bottom:16px}
-    .card.green{background:#f0fdf4;border-color:#bbf7d0}
-    .card.yellow{background:#fefce8;border-color:#fde047}
-    .card h3,.card h4{color:#C2410C;font-size:13px;margin-bottom:8px}
-    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-    .intro{background:#FFF7ED;border-left:4px solid #FF4D06;padding:12px;margin-bottom:16px;border-radius:4px;font-style:italic}
-    .section{color:#FF4D06;font-size:14px;font-weight:bold;margin:20px 0 10px;border-bottom:1px solid #FED7AA;padding-bottom:4px}
-    table{width:100%;border-collapse:collapse;margin-bottom:16px;font-size:10px}
-    th{background:#FF4D06;color:white;padding:7px;text-align:left}
-    td{padding:7px;border-bottom:1px solid #e2e8f0;vertical-align:top}
-    tr:nth-child(even){background:#f8fafc}
-    ul{margin-left:18px}
-    li{margin-bottom:4px}
-    .footer{text-align:center;margin-top:25px;padding-top:12px;border-top:1px solid #e2e8f0;font-size:9px;color:#94a3b8}
-    @media print{body{padding:15px}}
-  </style>
-</head>
-<body>
-  ${body}
-  <div class="footer">© ${new Date().getFullYear()} Fitsush — Personalized Nutrition Plan</div>
-</body>
-</html>`;
-
-  // Use a hidden iframe so print works in PWA standalone mode where
-  // window.open/_blank popups are blocked.
-  const iframe = document.createElement("iframe");
-  iframe.style.cssText = "position:fixed;width:0;height:0;border:none;opacity:0";
-  iframe.srcdoc = html;
-  iframe.onload = () => {
-    setTimeout(() => {
-      iframe.contentWindow?.print();
-      setTimeout(() => document.body.removeChild(iframe), 1000);
-    }, 400);
-  };
-  document.body.appendChild(iframe);
-}
 
 type PdfItem = {
   key: string;
@@ -315,6 +158,20 @@ function DietPlanPage() {
     };
     load();
   }, [clientProfile]);
+
+  // Same chart layout as PMS's download (shared dietPlanHtml.ts).
+  const downloadPlanPdf = async (plan: DietPlan) => {
+    const key = `pdf-${plan.id}`;
+    setBusyKey(key);
+    setErrorMsg(null);
+    try {
+      await printDietPlan(plan, clientProfile);
+    } catch (e: any) {
+      setErrorMsg(e?.message ?? "Could not prepare the PDF");
+    } finally {
+      setBusyKey(null);
+    }
+  };
 
   const openSignedUrl = async (item: PdfItem, mode: "view" | "download") => {
     setBusyKey(item.key);
@@ -530,11 +387,12 @@ function DietPlanPage() {
 
                       {/* Always-available client-side PDF generation */}
                       <button
-                        onClick={() => openPlanAsPdf(plan, clientProfile, affiliateProducts)}
-                        className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+                        onClick={() => downloadPlanPdf(plan)}
+                        disabled={busyKey === `pdf-${plan.id}`}
+                        className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
                       >
-                        <Download className="h-4 w-4" />
-                        Download PDF
+                        {busyKey === `pdf-${plan.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                        {busyKey === `pdf-${plan.id}` ? "Preparing PDF..." : "Download PDF"}
                       </button>
                     </li>
                   );
