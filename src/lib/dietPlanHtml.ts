@@ -360,28 +360,14 @@ export function kycHtml(kyc: PlanKyc): string {
 // ---------------------------------------------------------------------------
 
 function buildManualPlanHtml(plan: any, recipes: RecipeRow[], logoDataUrl: string): string {
-  const clientName = plan.clients?.name || '';
-
   // Manual plan (diet_plan_days) — same look as the AI plan PDF (buildRichAIPlanHtml):
-  // clinic logo, title, client details box, orange meal table, recipes, footer.
+  // clinic logo, one title (the plan name — no week badge or subtitle), client details box,
+  // orange meal table, recipes, footer.
   const days = ((plan.diet_plan_days ?? []) as any[]).sort(
     (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)
   );
   const mealColumns = planMealColumns(days);
   const showCalories = days.some((d) => d.total_calories);
-
-  const fmtDate = (d: Date) =>
-    `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`;
-  const dateRange = (() => {
-    const startStr = plan.start_date;
-    if (!startStr) return '';
-    const start = new Date(startStr);
-    if (isNaN(start.getTime())) return '';
-    const endDate = plan.end_date ? new Date(plan.end_date) : new Date(start.getTime() + (Math.max(days.length, 1) - 1) * 86400000);
-    return `${fmtDate(start)} to ${fmtDate(endDate)}`;
-  })();
-  const weeks = [...new Set(days.map((d) => /week\s*\d+/i.exec(d.day_label || '')?.[0]).filter(Boolean))] as string[];
-  const weekLabel = weeks.length ? weeks.join(', ') : plan.week_number ? `Week ${plan.week_number}` : '';
 
   return `<!DOCTYPE html>
 <html>
@@ -420,8 +406,6 @@ function buildManualPlanHtml(plan: any, recipes: RecipeRow[], logoDataUrl: strin
   <div class="header">
     ${logoDataUrl ? `<img src="${logoDataUrl}" alt="Fitsush Logo"/>` : ''}
     <h1>${escapeText(plan.plan_name || 'Diet Plan')}</h1>
-    ${clientName ? `<p>Customised diet plan for ${escapeText(clientName)}</p>` : ''}
-    ${weekLabel || dateRange ? `<p>${weekLabel ? `<span class="week-badge" style="margin-left:0">${escapeText(weekLabel)}</span>` : ''}${dateRange ? ` ${dateRange}` : ''}</p>` : ''}
   </div>
 
   ${kycHtml(planKyc(plan))}
@@ -619,9 +603,7 @@ function buildRichAIPlanHtml(
 <body>
   <div class="header">
     ${logoDataUrl ? `<img src="${logoDataUrl}" alt="Fitsush Logo"/>` : ''}
-    <h1>${aiData.planName ?? planMeta.planName}</h1>
-    ${client?.name ? `<p>Customised diet plan for ${escapePlain(client.name)}</p>` : ''}
-    <p><span class="week-badge" style="margin-left:0">${planMeta.weekLabel}</span>${planMeta.dateRange ? ` ${planMeta.dateRange}` : ''}</p>
+    <h1>${escapePlain(planMeta.planName)}</h1>
   </div>
 
   ${kycHtml(aiData.kyc ? { ...emptyKyc(), ...aiData.kyc } : clientKyc(client))}
@@ -702,7 +684,8 @@ function aiPlanMeta(plan: any) {
   }
 
   const planMeta = {
-    planName: aiData.planName ?? plan.plan_name ?? 'Diet Plan',
+    // The chart's only title: staff's custom title, else the AI's plan name.
+    planName: plan.custom_title?.trim() || aiData.planName || plan.plan_name || 'Diet Plan',
     weekLabel: plan.plan_name ?? aiData.planName ?? 'Diet Plan',
     dateRange,
     duration: String(dayCount),
