@@ -3,9 +3,18 @@ import { useAuth } from "@/hooks/use-auth";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { supabase } from "@/lib/supabase";
 import type { ClientBloodReport } from "@/lib/types";
+import {
+  BLOOD_MARKERS,
+  BLOOD_MARKER_MAP,
+  getMarkerRange,
+  getMarkerStatus,
+  type BloodMarkerKey,
+  type MarkerProfile,
+  type MarkerStatus,
+} from "@/lib/bloodMarkers";
 import { PageShell } from "@/components/app-shell";
 import { EmptyState, LoadingSpinner } from "@/components/ui-cards";
-import { FlaskConical, Plus, X, FileText } from "lucide-react";
+import { FlaskConical, Plus, X, FileText, Stethoscope } from "lucide-react";
 import {
   LineChart,
   Line,
@@ -38,6 +47,75 @@ const TRACKED_KEYS = [
 
 type TrackedKey = (typeof TRACKED_KEYS)[number]["key"];
 
+// Self-logged values use the keys above; PMS's blood_report_values columns
+// (BLOOD_MARKERS) are the same except fasting glucose.
+const SELF_TO_MARKER: Partial<Record<TrackedKey, BloodMarkerKey>> = {
+  fasting_glucose: "fasting_blood_sugar",
+};
+
+// One report on this page: added by the clinic in PMS (blood_reports +
+// blood_report_values) or logged by the client here (client_blood_reports).
+interface ReportItem {
+  id: string;
+  source: "clinic" | "self";
+  report_date: string | null;
+  created_at: string;
+  lab_name: string | null;
+  notes: string | null;
+  values: Partial<Record<BloodMarkerKey, number>>;
+}
+
+function fromSelf(r: ClientBloodReport): ReportItem {
+  const values: ReportItem["values"] = {};
+  for (const t of TRACKED_KEYS) {
+    const v = getNumeric(r.extracted_data, t.key);
+    if (v !== null) values[(SELF_TO_MARKER[t.key] ?? t.key) as BloodMarkerKey] = v;
+  }
+  return { id: `self:${r.id}`, source: "self", report_date: r.report_date, created_at: r.created_at, lab_name: null, notes: r.notes, values };
+}
+
+function fromClinic(r: any): ReportItem {
+  const row = (Array.isArray(r.blood_report_values) ? r.blood_report_values[0] : r.blood_report_values) ?? {};
+  const values: ReportItem["values"] = {};
+  for (const m of BLOOD_MARKERS) {
+    const v = getNumeric(row, m.key);
+    if (v !== null) values[m.key] = v;
+  }
+  const notes = [r.notes, row.notes].filter((n: unknown) => typeof n === "string" && n.trim()).join("\n") || null;
+  return { id: `clinic:${r.id}`, source: "clinic", report_date: r.report_date, created_at: r.created_at, lab_name: r.lab_name ?? null, notes, values };
+}
+
+const markerUnit = (k: BloodMarkerKey) => BLOOD_MARKER_MAP[k]?.unit ?? "";
+
+// The clinic's range for this client (sex/age rules in bloodMarkers.ts), e.g. "82–88", "< 5", "> 30".
+function rangeText(k: BloodMarkerKey, profile: MarkerProfile): string | null {
+  const def = BLOOD_MARKER_MAP[k];
+  if (!def) return null;
+  const { low, high } = getMarkerRange(def, profile);
+  if (low !== null && high !== null) return `${low}–${high}`;
+  if (high !== null) return `< ${high}`;
+  if (low !== null) return `> ${low}`;
+  return null;
+}
+
+const STATUS_STYLE: Record<MarkerStatus, { label: string; className: string } | null> = {
+  low: { label: "Low", className: "bg-warning/15 text-warning-foreground" },
+  high: { label: "High", className: "bg-destructive/10 text-destructive" },
+  normal: { label: "Normal", className: "bg-success/15 text-success" },
+  unknown: null,
+};
+
+function ageFromDob(dob: string | null | undefined): number | null {
+  if (!dob) return null;
+  const d = new Date(dob);
+  if (Number.isNaN(d.getTime())) return null;
+  const now = new Date();
+  let age = now.getFullYear() - d.getFullYear();
+  if (now.getMonth() < d.getMonth() || (now.getMonth() === d.getMonth() && now.getDate() < d.getDate())) age--;
+  return age;
+}
+const markerLabel = (k: BloodMarkerKey) => BLOOD_MARKER_MAP[k]?.label ?? k;
+
 function getNumeric(data: Record<string, unknown> | null, k: string): number | null {
   if (!data) return null;
   const v = data[k];
@@ -52,7 +130,7 @@ function getNumeric(data: Record<string, unknown> | null, k: string): number | n
 function BloodReportsPage() {
   const { clientProfile, isAuthenticated, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
-  const [reports, setReports] = useState<ClientBloodReport[]>([]);
+  const [reports, setReports] = useState<ReportItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
 
@@ -62,12 +140,24 @@ function BloodReportsPage() {
 
   const load = useCallback(async () => {
     if (!clientProfile) return;
-    const { data } = await supabase
-      .from("client_blood_reports")
-      .select("*")
-      .eq("client_id", clientProfile.id)
-      .order("report_date", { ascending: true });
-    setReports((data ?? []) as ClientBloodReport[]);
+    const [{ data: self }, { data: clinic }] = await Promise.all([
+      supabase
+        .from("client_blood_reports")
+        .select("*")
+        .eq("client_id", clientProfile.id),
+      // Reports the clinic added in PMS.
+      supabase
+        .from("blood_reports")
+        .select("*, blood_report_values(*)")
+        .eq("client_id", clientProfile.id),
+    ]);
+    const all = [
+      ...((self ?? []) as ClientBloodReport[]).map(fromSelf),
+      ...((clinic ?? []) as any[]).map(fromClinic),
+    ].sort((a, b) =>
+      (a.report_date ?? "").localeCompare(b.report_date ?? "") || a.created_at.localeCompare(b.created_at),
+    );
+    setReports(all);
     setLoading(false);
   }, [clientProfile]);
 
@@ -75,12 +165,18 @@ function BloodReportsPage() {
     if (clientProfile) load();
   }, [clientProfile, load]);
 
+  // A trend chart for every marker with at least two dated readings.
+  const profile: MarkerProfile = {
+    sex: clientProfile?.gender,
+    age: ageFromDob(clientProfile?.date_of_birth),
+  };
+
   const trends = useMemo(() => {
-    return TRACKED_KEYS.map((t) => {
+    return BLOOD_MARKERS.map((m) => {
       const series = reports
         .map((r) => {
-          const v = getNumeric(r.extracted_data, t.key);
-          if (v === null || !r.report_date) return null;
+          const v = r.values[m.key];
+          if (v === undefined || !r.report_date) return null;
           return {
             date: new Date(r.report_date).toLocaleDateString("en-IN", {
               day: "numeric",
@@ -90,8 +186,8 @@ function BloodReportsPage() {
           };
         })
         .filter((p): p is { date: string; value: number } => p !== null);
-      return { ...t, series };
-    }).filter((t) => t.series.length > 0);
+      return { key: m.key, label: m.label, unit: m.unit, series };
+    }).filter((t) => t.series.length >= 2);
   }, [reports]);
 
   if (authLoading || !isAuthenticated) return <LoadingSpinner />;
@@ -100,7 +196,7 @@ function BloodReportsPage() {
     <PageShell title="Blood Reports">
       <div className="mb-4 flex items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
-          Log your blood test results and track key markers over time.
+          Blood reports from your nutritionist and the ones you log, with key markers tracked over time.
         </p>
         {clientProfile && (
           <button
@@ -132,7 +228,7 @@ function BloodReportsPage() {
                   <div className="mb-3 flex items-center gap-2">
                     <FlaskConical className="h-4 w-4 text-muted-foreground" />
                     <h4 className="text-sm font-semibold text-foreground">
-                      {t.label} ({t.unit})
+                      {t.label}{t.unit ? ` (${t.unit})` : ""}
                     </h4>
                   </div>
                   <ResponsiveContainer width="100%" height={180}>
@@ -179,17 +275,26 @@ function BloodReportsPage() {
             </h3>
             <div className="space-y-2">
               {[...reports].reverse().map((r) => {
-                const filled = TRACKED_KEYS.map((t) => ({
-                  ...t,
-                  value: getNumeric(r.extracted_data, t.key),
-                })).filter((x) => x.value !== null);
+                // Group the values by panel (Sugar, Lipids, Thyroid, …) in marker order.
+                const groups: Array<{ group: string; items: Array<{ key: BloodMarkerKey; value: number }> }> = [];
+                for (const m of BLOOD_MARKERS) {
+                  const value = r.values[m.key];
+                  if (value === undefined) continue;
+                  let g = groups.find((x) => x.group === m.group);
+                  if (!g) groups.push((g = { group: m.group, items: [] }));
+                  g.items.push({ key: m.key, value });
+                }
                 return (
                   <div key={r.id} className="rounded-2xl border bg-card p-4">
                     <div className="mb-2 flex items-center gap-2">
                       <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10">
-                        <FileText className="h-4 w-4 text-primary" />
+                        {r.source === "clinic" ? (
+                          <Stethoscope className="h-4 w-4 text-primary" />
+                        ) : (
+                          <FileText className="h-4 w-4 text-primary" />
+                        )}
                       </div>
-                      <div>
+                      <div className="min-w-0">
                         <p className="text-sm font-semibold text-foreground">
                           {r.report_date
                             ? new Date(r.report_date).toLocaleDateString("en-IN", {
@@ -200,29 +305,58 @@ function BloodReportsPage() {
                             : "Undated report"}
                         </p>
                         <p className="text-[11px] text-muted-foreground">
-                          Logged {new Date(r.created_at).toLocaleDateString("en-IN")}
+                          {r.source === "clinic"
+                            ? `Added by your nutritionist${r.lab_name ? ` · ${r.lab_name}` : ""}`
+                            : `Logged by you · ${new Date(r.created_at).toLocaleDateString("en-IN")}`}
                         </p>
                       </div>
                     </div>
-                    {filled.length > 0 && (
-                      <div className="grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-3">
-                        {filled.map((m) => (
-                          <div key={m.key}>
-                            <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                              {m.label}
-                            </p>
-                            <p className="text-sm font-semibold text-foreground">
-                              {m.value}
-                              <span className="ml-0.5 text-xs font-normal text-muted-foreground">
-                                {m.unit}
-                              </span>
-                            </p>
+                    {groups.length > 0 && (
+                      <div className="space-y-3">
+                        {groups.map((g) => (
+                          <div key={g.group}>
+                            {groups.length > 1 && (
+                              <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-primary">
+                                {g.group}
+                              </p>
+                            )}
+                            <div className="grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-3">
+                              {g.items.map((m) => {
+                                const status = STATUS_STYLE[getMarkerStatus(m.key, m.value, profile)];
+                                const range = rangeText(m.key, profile);
+                                return (
+                                  <div key={m.key}>
+                                    <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                      {markerLabel(m.key)}
+                                    </p>
+                                    <p className="flex flex-wrap items-center gap-1 text-sm font-semibold text-foreground">
+                                      <span>
+                                        {m.value}
+                                        {markerUnit(m.key) && (
+                                          <span className="ml-0.5 text-xs font-normal text-muted-foreground">
+                                            {markerUnit(m.key)}
+                                          </span>
+                                        )}
+                                      </span>
+                                      {status && range && (
+                                        <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${status.className}`}>
+                                          {status.label}
+                                        </span>
+                                      )}
+                                    </p>
+                                    {range && (
+                                      <p className="text-[10px] text-muted-foreground">Range {range}</p>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
                           </div>
                         ))}
                       </div>
                     )}
                     {r.notes && (
-                      <p className="mt-2 border-t pt-2 text-xs text-muted-foreground">
+                      <p className="mt-2 whitespace-pre-line border-t pt-2 text-xs text-muted-foreground">
                         {r.notes}
                       </p>
                     )}

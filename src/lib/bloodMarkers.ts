@@ -1,5 +1,7 @@
 // Blood marker definitions: labels, units, reference ranges.
-// Ranges are the clinic's functional ranges (PMS/ANALYSIS (2).xlsx), used only for low/normal/high flagging.
+// Ranges are the clinic's ranges from PMS/ANALYSIS.xlsx (MALE / FEMALE columns), used for low/normal/high flagging
+// in PMS and on the client portal. Markers the sheet has no range for (vitamin D, total T3/T4, PP sugar, urea,
+// zinc) keep standard ranges.
 // refLow/refHigh are the default (male / adult) range; `rules` override it by sex and/or age.
 
 export type BloodMarkerKey =
@@ -130,7 +132,7 @@ export const BLOOD_MARKERS: BloodMarkerDef[] = [
   { key: 'total_cholesterol', label: 'Cholesterol', unit: 'mg/dL', refLow: 120, refHigh: 240, rules: [{ sex: 'male', minAge: 60, low: 170, high: 270 }, { sex: 'female', minAge: 60, low: 200, high: 300 }], group: 'Lipids', aliases: ['total cholesterol', 'cholesterol total', 'cholesterol'] },
   { key: 'triglycerides', label: 'Triglycerides', unit: 'mg/dL', refLow: 50, refHigh: 90, group: 'Lipids', aliases: ['triglycerides', 'tg'] },
   // Vitamins
-  { key: 'vitamin_b12', label: 'B12', unit: 'pg/mL', refLow: 200, refHigh: 900, group: 'Vitamins', aliases: ['vitamin b12', 'b12', 'cobalamin', 'vit b12'] },
+  { key: 'vitamin_b12', label: 'B12', unit: 'pg/mL', refLow: 400, refHigh: 800, group: 'Vitamins', aliases: ['vitamin b12', 'b12', 'cobalamin', 'vit b12'] },
   { key: 'homocysteine', label: 'Homocysteine', unit: 'µmol/L', refLow: 5, refHigh: 9, group: 'Inflammation', aliases: ['homocysteine', 'hcy'] },
   // Inflammation/Liver
   { key: 'ggt', label: 'GGT', unit: 'U/L', refLow: 12, refHigh: 24, rules: [{ sex: 'female', low: 10, high: 22 }], group: 'Inflammation', aliases: ['ggt', 'gamma glutamyl transferase', 'gamma gt'] },

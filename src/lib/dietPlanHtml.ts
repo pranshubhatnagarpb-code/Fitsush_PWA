@@ -11,7 +11,7 @@
 // Each app's dietPlanPdf.ts loads the data and calls buildPlanHtml().
 // ===========================================================================
 
-import { mealFoodOptions, mealOptionRowsHtml } from './mealOptions';
+import { mealFoodOptions, mealOptionRowsHtml, DIET_TABLE_CSS } from './mealOptions';
 
 export type RecipeRow = { Meal_name: string; Ingredients: string; Instructions: string; Remarks: string };
 export type AffiliateProduct = { product_name: string; link: string };
@@ -82,6 +82,27 @@ export function manualRecipeKeys(days: any[]): string[] {
     if (Array.isArray(d?.meals)) d.meals.forEach((m: any) => (Array.isArray(m?.recipes) ? m.recipes : []).forEach(add));
   });
   return [...names];
+}
+
+// Staff edits to the recipes printed with a plan, made in the planner before
+// downloading. `edited` replaces a matched meal_recipes row (keyed by its
+// original Meal_name), `removed` drops matched rows, `added` are recipes
+// written just for this plan. Stored in ai_plan_data.recipeEdits (AI plans)
+// or diet_plans.recipe_edits (manual plans).
+export type RecipeEdits = { edited?: Record<string, RecipeRow>; removed?: string[]; added?: RecipeRow[] };
+
+export function planRecipeEdits(plan: any): RecipeEdits | undefined {
+  return (plan?.is_ai_generated && plan?.ai_plan_data ? plan.ai_plan_data.recipeEdits : plan?.recipe_edits) ?? undefined;
+}
+
+// The recipes to print: matched recipes with the plan's edits applied.
+export function applyRecipeEdits(matched: RecipeRow[], edits?: RecipeEdits | null): RecipeRow[] {
+  if (!edits) return matched;
+  const removed = new Set(edits.removed ?? []);
+  return [
+    ...matched.filter((r) => !removed.has(r.Meal_name)).map((r) => edits.edited?.[r.Meal_name] ?? r),
+    ...(edits.added ?? []),
+  ].filter((r) => r.Meal_name?.trim());
 }
 
 export type PlanSupplement = { time: string; supplement: string; notes: string };
@@ -247,23 +268,99 @@ function escapeText(str: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Client details (KYC) box — the same rows on every diet chart, AI or manual.
+// Staff fill/adjust it in the planner (PlanKycEditor); it's stored with the
+// plan in ai_plan_data.kyc (AI) or diet_plans.kyc (manual). Plans saved before
+// it existed fall back to what the client record has (clientKyc).
+// ---------------------------------------------------------------------------
+
+export type PlanKyc = {
+  clientId?: string;
+  height: string; weight: string; goal: string; ibwRange: string; bodyFat: string; age: string;
+  idealBodyWeight: string; bmr: string; bmi: string; addicted: string; likes: string; dislikes: string;
+  allergies: string; familyHistory: string; medicalHistory: string; deficiencies: string;
+  note: string; calories: string; protein: string; carbs: string; fat: string;
+};
+
+type KycField = Exclude<keyof PlanKyc, 'clientId'>;
+
+// Client Details table rows, in print order.
+export const KYC_ROWS: Array<[KycField, string]> = [
+  ['height', 'Height'], ['weight', 'Weight'], ['goal', 'Goal'], ['ibwRange', 'IBW Range'],
+  ['bodyFat', 'Body fat %'], ['age', 'Age'], ['idealBodyWeight', 'Ideal body weight'], ['bmr', 'BMR'],
+  ['bmi', 'BMI'], ['addicted', 'Addicted'], ['likes', 'Likes'], ['dislikes', 'Dislikes'],
+  ['allergies', 'Allergies'], ['familyHistory', 'Family history'], ['medicalHistory', 'Medical condition/history'],
+  ['deficiencies', 'Deficiencies'],
+];
+
+export const DEFAULT_KYC_NOTE = "(Don't go on weight. Don't worry about it, just focus on your inch loss.)";
+
+export const emptyKyc = (): PlanKyc => ({
+  height: '', weight: '', goal: '', ibwRange: '', bodyFat: '', age: '', idealBodyWeight: '', bmr: '', bmi: '',
+  addicted: '', likes: '', dislikes: '', allergies: '', familyHistory: '', medicalHistory: '', deficiencies: '',
+  note: DEFAULT_KYC_NOTE, calories: '', protein: '', carbs: '', fat: '',
+});
+
+const listText = (v: unknown) => (Array.isArray(v) ? v.filter(Boolean).join(', ') : String(v ?? '').trim());
+
+// What the client record alone can fill in (clients row: height, weight, goal, DOB/age, bmi, histories).
+export function clientKyc(client: any): PlanKyc {
+  const height = Number(client?.height) || 0;
+  const weight = Number(client?.weight) || 0;
+  const bmi = client?.bmi ?? (height && weight ? Math.round((weight / (height / 100) ** 2) * 10) / 10 : '');
+  const age = client?.date_of_birth ? calculateAge(client.date_of_birth) : client?.age ?? '';
+  return {
+    ...emptyKyc(),
+    clientId: client?.id,
+    height: height ? String(height) : '',
+    weight: weight ? String(weight) : '',
+    goal: String(client?.goal ?? '').replace(/_/g, ' '),
+    age: age === '' ? '' : String(age),
+    bmi: String(bmi ?? ''),
+    familyHistory: listText(client?.family_history),
+    medicalHistory: listText(client?.health_conditions),
+  };
+}
+
+export function planKyc(plan: any): PlanKyc {
+  const stored = plan?.is_ai_generated && plan?.ai_plan_data ? plan.ai_plan_data.kyc : plan?.kyc;
+  return stored ? { ...emptyKyc(), ...stored } : clientKyc(plan?.clients);
+}
+
+// Bordered two-column table (as on the clinic's Canva charts), the note line,
+// then calories given + macros when any are filled in.
+export function kycHtml(kyc: PlanKyc): string {
+  const border = '1.5px solid #c0392b';
+  const cell = `border:${border};padding:8px 12px;font-size:15px;vertical-align:top`;
+  const v = (s: string) => escapeText(s?.trim() || '--');
+  const hasMacros = [kyc.calories, kyc.protein, kyc.carbs, kyc.fat].some((x) => x?.trim());
+  return `
+  <div class="client-details" style="margin-bottom:20px;background:none;border:0;border-radius:0;padding:0">
+    <table style="width:100%;border-collapse:collapse;margin:0;background:#f5f9ff">
+      <tr><th colspan="2" style="${cell};background:#f5f9ff;color:#111;font-size:17px;text-align:left">Client Details:</th></tr>
+      ${KYC_ROWS.map(([key, label]) => `
+      <tr style="background:#f5f9ff"><td style="${cell};width:35%;font-weight:700">${label}</td><td style="${cell}">${v(kyc[key])}</td></tr>`).join('')}
+    </table>
+    ${kyc.note?.trim() ? `<p style="color:#c0392b;font-style:italic;font-size:15px;margin:12px 0">${escapeText(kyc.note.trim())}</p>` : ''}
+    ${hasMacros ? `
+    <table style="width:100%;border-collapse:collapse;margin:${kyc.note?.trim() ? '0' : '12px 0 0'};background:#f5f9ff">
+      <tr style="background:#f5f9ff"><td colspan="3" style="${cell};font-weight:700">Calories given: ${escapeText(kyc.calories?.trim() || '--')}</td></tr>
+      <tr style="background:#f5f9ff"><td colspan="3" style="${cell};font-weight:700">Your Macros:</td></tr>
+      <tr style="background:#f5f9ff">
+        <td style="${cell};font-weight:700">Protein: ${escapeText(kyc.protein?.trim() || '--')}</td>
+        <td style="${cell};font-weight:700">Carbs: ${escapeText(kyc.carbs?.trim() || '--')}</td>
+        <td style="${cell};font-weight:700">Fat: ${escapeText(kyc.fat?.trim() || '--')}</td>
+      </tr>
+    </table>` : ''}
+  </div>`;
+}
+
+// ---------------------------------------------------------------------------
 // Manual plan layout (diet_plan_days)
 // ---------------------------------------------------------------------------
 
 function buildManualPlanHtml(plan: any, recipes: RecipeRow[], logoDataUrl: string): string {
-  const clientDetails = {
-    name: plan.clients?.name || 'Client',
-    age: plan.clients?.date_of_birth ? calculateAge(plan.clients.date_of_birth) : plan.clients?.age ?? '--',
-    gender: plan.clients?.gender || 'Not specified',
-    height: plan.clients?.height || '--',
-    weight: plan.clients?.weight || '--',
-    skinType: plan.clients?.skin_type || 'Not specified',
-    hairType: plan.clients?.hair_type || 'Not specified',
-    goal: plan.clients?.goal || 'Not specified',
-    dietPreference: plan.clients?.diet_preference || 'Not specified',
-    healthConditions: (plan.clients?.health_conditions as string[]) || [],
-    notes: plan.clients?.notes || '',
-  };
+  const clientName = plan.clients?.name || '';
 
   // Manual plan (diet_plan_days) — same look as the AI plan PDF (buildRichAIPlanHtml):
   // clinic logo, title, client details box, orange meal table, recipes, footer.
@@ -272,9 +369,6 @@ function buildManualPlanHtml(plan: any, recipes: RecipeRow[], logoDataUrl: strin
   );
   const mealColumns = planMealColumns(days);
   const showCalories = days.some((d) => d.total_calories);
-  const healthConditions: string[] = Array.isArray(clientDetails.healthConditions)
-    ? clientDetails.healthConditions
-    : clientDetails.healthConditions ? [String(clientDetails.healthConditions)] : [];
 
   const fmtDate = (d: Date) =>
     `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`;
@@ -296,72 +390,56 @@ function buildManualPlanHtml(plan: any, recipes: RecipeRow[], logoDataUrl: strin
   <title>${escapeText(plan.plan_name || 'Diet Plan')}</title>
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
-    body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;padding:25px 35px;color:#333;font-size:11px;line-height:1.4}
+    body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;padding:25px 35px;color:#333;font-size:13px;line-height:1.4}
     .header{text-align:center;margin-bottom:25px;border-bottom:2px solid #FF4D06;padding-bottom:15px}
     .header img{width:180px;height:auto;margin-bottom:12px}
-    .header h1{color:#FF4D06;font-size:20px;margin-bottom:5px}
-    .header p{color:#666;font-size:12px}
-    .week-badge{display:inline-block;background:#FF4D06;color:white;padding:3px 8px;border-radius:12px;font-size:10px;margin-left:10px}
+    .header h1{color:#FF4D06;font-size:24px;margin-bottom:5px}
+    .header p{color:#666;font-size:14px}
+    .week-badge{display:inline-block;background:#FF4D06;color:white;padding:3px 8px;border-radius:12px;font-size:12px;margin-left:10px}
     .client-details{background:#f0f7ff;border:1px solid #b3d1ff;border-radius:8px;padding:15px;margin-bottom:20px}
-    .client-details h3{color:#1a5fb4;font-size:14px;margin-bottom:10px}
-    .client-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;font-size:10px}
+    .client-details h3{color:#1a5fb4;font-size:17px;margin-bottom:10px}
+    .client-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;font-size:12px}
     .client-grid div{margin-bottom:5px}
     .client-grid span{font-weight:bold;color:#555}
-    .condition-badge{display:inline-block;background:#e3f2fd;color:#1976d2;padding:2px 6px;border-radius:10px;font-size:9px;margin-right:4px;margin-bottom:4px}
+    .condition-badge{display:inline-block;background:#e3f2fd;color:#1976d2;padding:2px 6px;border-radius:10px;font-size:11px;margin-right:4px;margin-bottom:4px}
     .intro{background:#f9f9f9;padding:15px;border-radius:8px;margin-bottom:20px;border-left:4px solid #FF4D06}
-    table{width:100%;border-collapse:collapse;margin-bottom:20px;font-size:12px;line-height:1.45}
+    table{width:100%;border-collapse:collapse;margin-bottom:20px;font-size:14px;line-height:1.45}
     th{background:#FF4D06;color:white;padding:8px;text-align:left;font-weight:bold}
     td{padding:8px;border-bottom:1px solid #ddd;vertical-align:top}
     tr:nth-child(even){background:#f9f9f9}
-    .section-title{color:#FF4D06;font-size:16px;font-weight:bold;margin:25px 0 15px;border-bottom:1px solid #FED7AA;padding-bottom:5px}
-    .day-title{font-size:14px;color:#FF4D06;font-weight:700;margin:18px 0 8px;padding-bottom:4px;border-bottom:1px solid #FED7AA}
-    .day-notes{font-size:11px;color:#555;margin:-12px 0 16px;padding:6px 8px;background:#fff7ed;border-radius:4px}
+    .section-title{color:#FF4D06;font-size:19px;font-weight:bold;margin:25px 0 15px;border-bottom:1px solid #FED7AA;padding-bottom:5px}
+    .day-title{font-size:17px;color:#FF4D06;font-weight:700;margin:18px 0 8px;padding-bottom:4px;border-bottom:1px solid #FED7AA}
+    .day-notes{font-size:13px;color:#555;margin:-12px 0 16px;padding:6px 8px;background:#fff7ed;border-radius:4px}
     tbody tr:nth-child(even){background:transparent}
-    .footer{text-align:center;margin-top:30px;padding-top:15px;border-top:1px solid #ddd;font-size:9px;color:#999}
+    .footer{text-align:center;margin-top:30px;padding-top:15px;border-top:1px solid #ddd;font-size:11px;color:#999}
     @media print{body{padding:15px}}
+    ${DIET_TABLE_CSS}
   </style>
 </head>
 <body>
   <div class="header">
     ${logoDataUrl ? `<img src="${logoDataUrl}" alt="Fitsush Logo"/>` : ''}
     <h1>${escapeText(plan.plan_name || 'Diet Plan')}</h1>
-    ${weekLabel ? `<p><span class="week-badge" style="margin-left:0">${escapeText(weekLabel)}</span></p>` : ''}
+    ${clientName ? `<p>Customised diet plan for ${escapeText(clientName)}</p>` : ''}
+    ${weekLabel || dateRange ? `<p>${weekLabel ? `<span class="week-badge" style="margin-left:0">${escapeText(weekLabel)}</span>` : ''}${dateRange ? ` ${dateRange}` : ''}</p>` : ''}
   </div>
 
-  <div class="client-details">
-    <h3>📋 Client Details</h3>
-    <div class="client-grid">
-      <div><span>Name:</span> ${escapeText(clientDetails.name)}</div>
-      <div><span>Age:</span> ${clientDetails.age} years</div>
-      <div><span>Gender:</span> ${escapeText(String(clientDetails.gender))}</div>
-      <div><span>Height/Weight:</span> ${clientDetails.height}cm / ${clientDetails.weight}kg</div>
-      <div><span>Skin Type:</span> ${escapeText(String(clientDetails.skinType))}</div>
-      <div><span>Hair Type:</span> ${escapeText(String(clientDetails.hairType))}</div>
-      <div><span>Goal:</span> ${escapeText(String(clientDetails.goal))}</div>
-      <div><span>Diet Preference:</span> ${escapeText(String(clientDetails.dietPreference))}</div>
-      ${dateRange ? `<div><span>Date:</span> ${dateRange}</div>` : ''}
-      <div><span>Duration:</span> ${countPlanDays(days)} ${countPlanDays(days) === 1 ? 'day' : 'days'}</div>
-    </div>
-    ${healthConditions.length > 0 ? `
-    <div style="margin-top:10px">
-      <h4 style="font-size:10px;margin-bottom:5px;color:#555">Health Conditions:</h4>
-      ${healthConditions.map((c) => `<span class="condition-badge">${escapeText(c)}</span>`).join('')}
-    </div>` : ''}
-    ${clientDetails.notes ? `<div style="margin-top:10px;font-size:10px"><strong>Notes:</strong> ${escapeText(clientDetails.notes)}</div>` : ''}
-  </div>
+  ${kycHtml(planKyc(plan))}
 
   ${plan.instructions ? `<div class="intro"><p><strong>General Instructions:</strong> ${escapeText(plan.instructions)}</p></div>` : ''}
 
   <h3 class="section-title">Diet Chart</h3>
   ${days.map((d: any) => `
-    <h3 class="day-title">${escapeText(d.day_label)}${showCalories && d.total_calories ? ` <span style="font-size:11px;color:#888;font-weight:normal;">— ${d.total_calories} kcal</span>` : ''}</h3>
+    <h3 class="day-title">${escapeText(d.day_label)}${showCalories && d.total_calories ? ` <span style="font-size:13px;color:#888;font-weight:normal;">— ${d.total_calories} kcal</span>` : ''}</h3>
     <table>
       <thead><tr><th style="width:24%">Meal Time</th><th>Food Plan</th></tr></thead>
       <tbody>
-        ${mealColumns.map((l) => mealOptionRowsHtml(
+        ${mealColumns.map((l, gi) => mealOptionRowsHtml(
           dayMealOptionsFor(d, l).map(escapeText),
           [`<td><strong>${escapeText(l)}</strong></td>`],
           [],
+          '<td>',
+          gi,
         )).join('')}
       </tbody>
     </table>
@@ -381,13 +459,13 @@ function buildManualPlanHtml(plan: any, recipes: RecipeRow[], logoDataUrl: strin
 
   ${recipes.length > 0 ? `
   <div style="page-break-before:always;margin-top:24px">
-    <h2 style="color:#FF4D06;font-size:18px;border-bottom:2px solid #FF4D06;padding-bottom:6px;margin-bottom:14px">Recipes for mentioned meals</h2>
+    <h2 style="color:#FF4D06;font-size:21px;border-bottom:2px solid #FF4D06;padding-bottom:6px;margin-bottom:14px">Recipes for mentioned meals</h2>
     ${recipes.map(r => `
       <div style="margin-bottom:16px;page-break-inside:avoid">
-        <h3 style="color:#1a5fb4;font-size:13px;margin-bottom:6px">${escapeText(r.Meal_name)}</h3>
-        ${r.Ingredients ? `<div style="font-size:11px;line-height:1.5;color:#333;margin-bottom:6px"><strong>Ingredients:</strong><br/>${escapeText(r.Ingredients)}</div>` : ''}
-        <div style="font-size:11px;line-height:1.5;color:#333;margin-bottom:6px"><strong>Instructions:</strong><br/>${escapeText(r.Instructions)}</div>
-        ${r.Remarks ? `<div style="font-size:11px;line-height:1.5;color:#555"><strong>Remarks:</strong><br/>${escapeText(r.Remarks)}</div>` : ''}
+        <h3 style="color:#1a5fb4;font-size:15px;margin-bottom:6px">${escapeText(r.Meal_name)}</h3>
+        ${r.Ingredients ? `<div style="font-size:13px;line-height:1.5;color:#333;margin-bottom:6px"><strong>Ingredients:</strong><br/>${escapeText(r.Ingredients)}</div>` : ''}
+        <div style="font-size:13px;line-height:1.5;color:#333;margin-bottom:6px"><strong>Instructions:</strong><br/>${escapeText(r.Instructions)}</div>
+        ${r.Remarks ? `<div style="font-size:13px;line-height:1.5;color:#555"><strong>Remarks:</strong><br/>${escapeText(r.Remarks)}</div>` : ''}
       </div>`).join('')}
   </div>` : ''}
 
@@ -415,22 +493,6 @@ function buildRichAIPlanHtml(
   const escapePlain = (s: string) =>
     (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-  const healthConditions: string[] = Array.isArray(client?.health_conditions)
-    ? client.health_conditions
-    : client?.health_conditions
-    ? [client.health_conditions]
-    : [];
-
-  const age = (() => {
-    if (!client?.date_of_birth) return client?.age ?? '--';
-    const dob = new Date(client.date_of_birth);
-    const today = new Date();
-    let a = today.getFullYear() - dob.getFullYear();
-    const m = today.getMonth() - dob.getMonth();
-    if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) a--;
-    return a;
-  })();
-
   // Per-meal nutrition (calories/macros) is optional AI output; the column only shows if any meal has it.
   const hasNutrition = ((aiData.dayGroups ?? []) as any[]).some((g: any) => ((g.meals ?? []) as any[]).some((m: any) => m.nutrition));
   const formatNutrition = (n?: { calories?: string; protein?: string; carbs?: string; fat?: string }) => {
@@ -444,8 +506,8 @@ function buildRichAIPlanHtml(
   };
 
   const dayGroupTables = ((aiData.dayGroups ?? []) as any[]).map((group: any) => `
-    <h3 style="font-size:14px;color:#FF4D06;font-weight:700;margin:18px 0 8px;padding-bottom:4px;border-bottom:1px solid #FED7AA;">
-      ${group.label ?? ''}${group.dates ? ` <span style="font-size:12px;color:#666;font-weight:normal;">(${group.dates})</span>` : ''}${group.dailyTotals ? ` <span style="font-size:11px;color:#888;font-weight:normal;">— Day total: ${esc(formatNutrition(group.dailyTotals))}</span>` : ''}
+    <h3 style="font-size:17px;color:#FF4D06;font-weight:700;margin:18px 0 8px;padding-bottom:4px;border-bottom:1px solid #FED7AA;">
+      ${group.label ?? ''}${group.dates ? ` <span style="font-size:14px;color:#666;font-weight:normal;">(${group.dates})</span>` : ''}${group.dailyTotals ? ` <span style="font-size:13px;color:#888;font-weight:normal;">— Day total: ${esc(formatNutrition(group.dailyTotals))}</span>` : ''}
     </h3>
     <table>
       <thead><tr>
@@ -454,7 +516,7 @@ function buildRichAIPlanHtml(
         <th style="width:${hasNutrition ? '12%' : '15%'}">Notes</th>${hasNutrition ? '<th style="width:17%">Nutrition</th>' : ''}
       </tr></thead>
       <tbody>
-        ${((group.meals ?? []) as any[]).map((m: any) => mealOptionRowsHtml(
+        ${((group.meals ?? []) as any[]).map((m: any, gi: number) => mealOptionRowsHtml(
           mealFoodOptions(m).map(esc),
           [`<td>${m.period ?? '-'}</td>`, `<td>${m.time ?? '-'}</td>`],
           [
@@ -462,26 +524,28 @@ function buildRichAIPlanHtml(
             `<td>${esc(m.notes ?? '-')}</td>`,
             ...(hasNutrition ? [`<td>${esc(formatNutrition(m.nutrition))}</td>`] : []),
           ],
+          '<td>',
+          gi,
         )).join('')}
       </tbody>
     </table>`).join('');
 
   const recipesHtml = recipes.length === 0 ? '' : `
     <div style="page-break-before:always;margin-top:24px">
-      <h2 style="color:#FF4D06;font-size:18px;border-bottom:2px solid #FF4D06;padding-bottom:6px;margin-bottom:14px">Recipes for mentioned meals</h2>
+      <h2 style="color:#FF4D06;font-size:21px;border-bottom:2px solid #FF4D06;padding-bottom:6px;margin-bottom:14px">Recipes for mentioned meals</h2>
       ${recipes.map(r => `
         <div style="margin-bottom:16px;page-break-inside:avoid">
-          <h3 style="color:#1a5fb4;font-size:13px;margin-bottom:6px">${escapePlain(r.Meal_name)}</h3>
-          ${r.Ingredients ? `<div style="font-size:11px;line-height:1.5;color:#333;margin-bottom:6px"><strong>Ingredients:</strong><br/><span style="white-space:pre-wrap">${escapePlain(r.Ingredients)}</span></div>` : ''}
-          <div style="font-size:11px;line-height:1.5;color:#333;margin-bottom:6px"><strong>Instructions:</strong><br/><span style="white-space:pre-wrap">${escapePlain(r.Instructions)}</span></div>
-          ${r.Remarks ? `<div style="font-size:11px;line-height:1.5;color:#555"><strong>Remarks:</strong><br/><span style="white-space:pre-wrap">${escapePlain(r.Remarks)}</span></div>` : ''}
+          <h3 style="color:#1a5fb4;font-size:15px;margin-bottom:6px">${escapePlain(r.Meal_name)}</h3>
+          ${r.Ingredients ? `<div style="font-size:13px;line-height:1.5;color:#333;margin-bottom:6px"><strong>Ingredients:</strong><br/><span style="white-space:pre-wrap">${escapePlain(r.Ingredients)}</span></div>` : ''}
+          <div style="font-size:13px;line-height:1.5;color:#333;margin-bottom:6px"><strong>Instructions:</strong><br/><span style="white-space:pre-wrap">${escapePlain(r.Instructions)}</span></div>
+          ${r.Remarks ? `<div style="font-size:13px;line-height:1.5;color:#555"><strong>Remarks:</strong><br/><span style="white-space:pre-wrap">${escapePlain(r.Remarks)}</span></div>` : ''}
         </div>`).join('')}
     </div>`;
 
   const affiliateHtml = affiliateProducts.length === 0 ? '' : `
     <div style="margin-top:24px;page-break-inside:avoid">
-      <h2 style="color:#b45309;font-size:16px;border-bottom:2px solid #f59e0b;padding-bottom:6px;margin-bottom:12px">🛒 Shop Recommended Products</h2>
-      <table style="width:100%;border-collapse:collapse;font-size:11px">
+      <h2 style="color:#b45309;font-size:19px;border-bottom:2px solid #f59e0b;padding-bottom:6px;margin-bottom:12px">🛒 Shop Recommended Products</h2>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
         <thead><tr>
           <th style="background:#f59e0b;color:white;padding:7px 10px;text-align:left;width:40%">Product</th>
           <th style="background:#f59e0b;color:white;padding:7px 10px;text-align:left">Buy Link</th>
@@ -505,80 +569,62 @@ function buildRichAIPlanHtml(
   <title>${planMeta.planName}</title>
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
-    body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;padding:25px 35px;color:#333;font-size:11px;line-height:1.4}
+    body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;padding:25px 35px;color:#333;font-size:13px;line-height:1.4}
     .header{text-align:center;margin-bottom:25px;border-bottom:2px solid #FF4D06;padding-bottom:15px}
     .header img{width:180px;height:auto;margin-bottom:12px}
-    .header h1{color:#FF4D06;font-size:20px;margin-bottom:5px}
-    .header p{color:#666;font-size:12px}
-    .week-badge{display:inline-block;background:#FF4D06;color:white;padding:3px 8px;border-radius:12px;font-size:10px;margin-left:10px}
+    .header h1{color:#FF4D06;font-size:24px;margin-bottom:5px}
+    .header p{color:#666;font-size:14px}
+    .week-badge{display:inline-block;background:#FF4D06;color:white;padding:3px 8px;border-radius:12px;font-size:12px;margin-left:10px}
     .client-details{background:#f0f7ff;border:1px solid #b3d1ff;border-radius:8px;padding:15px;margin-bottom:20px}
-    .client-details h3{color:#1a5fb4;font-size:14px;margin-bottom:10px}
-    .client-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;font-size:10px}
+    .client-details h3{color:#1a5fb4;font-size:17px;margin-bottom:10px}
+    .client-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;font-size:12px}
     .client-grid div{margin-bottom:5px}
     .client-grid span{font-weight:bold;color:#555}
-    .condition-badge{display:inline-block;background:#e3f2fd;color:#1976d2;padding:2px 6px;border-radius:10px;font-size:9px;margin-right:4px;margin-bottom:4px}
+    .condition-badge{display:inline-block;background:#e3f2fd;color:#1976d2;padding:2px 6px;border-radius:10px;font-size:11px;margin-right:4px;margin-bottom:4px}
     .intro{background:#f9f9f9;padding:15px;border-radius:8px;margin-bottom:20px;border-left:4px solid #FF4D06}
     .affirmations{background:#fef9e7;padding:15px;border-radius:8px;margin-bottom:20px;border-left:4px solid #f39c12}
-    .affirmations h3{color:#f39c12;font-size:14px;margin-bottom:10px}
+    .affirmations h3{color:#f39c12;font-size:17px;margin-bottom:10px}
     .affirmations ul{margin-left:20px}
     .affirmations li{margin-bottom:5px}
-    table{width:100%;border-collapse:collapse;margin-bottom:20px;font-size:12px;line-height:1.45}
+    table{width:100%;border-collapse:collapse;margin-bottom:20px;font-size:14px;line-height:1.45}
     th{background:#FF4D06;color:white;padding:8px;text-align:left;font-weight:bold}
     td{padding:8px;border-bottom:1px solid #ddd;vertical-align:top}
     tr:nth-child(even){background:#f9f9f9}
-    .serving{background:#e8f5e8;padding:10px;border-radius:5px;margin-bottom:15px;font-size:10px}
+    .serving{background:#e8f5e8;padding:10px;border-radius:5px;margin-bottom:15px;font-size:12px}
     .oil-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:15px}
     .oil-card{background:#f8f9fa;border:1px solid #dee2e6;border-radius:5px;padding:10px}
-    .oil-card h4{font-size:11px;margin-bottom:5px;color:#495057}
+    .oil-card h4{font-size:13px;margin-bottom:5px;color:#495057}
     .oil-card ul{list-style:none;padding:0;margin:0}
-    .oil-card li{font-size:9px;margin-bottom:2px}
+    .oil-card li{font-size:11px;margin-bottom:2px}
     .notes-box{background:#fff3cd;border:1px solid #ffeaa7;border-radius:5px;padding:15px;margin-bottom:20px}
-    .notes-box h4{color:#856404;font-size:12px;margin-bottom:10px}
+    .notes-box h4{color:#856404;font-size:14px;margin-bottom:10px}
     .notes-box ul{margin-left:15px}
-    .notes-box li{margin-bottom:5px;font-size:10px}
+    .notes-box li{margin-bottom:5px;font-size:12px}
     .grocery-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px}
     .grocery-card{background:#f8f9fa;border:1px solid #dee2e6;border-radius:5px;padding:10px}
-    .grocery-card h4{font-size:11px;margin-bottom:5px;color:#495057}
+    .grocery-card h4{font-size:13px;margin-bottom:5px;color:#495057}
     .grocery-card ul{list-style:none;padding:0;margin:0}
-    .grocery-card li{font-size:9px;margin-bottom:2px}
+    .grocery-card li{font-size:11px;margin-bottom:2px}
     .tips-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px}
     .tip-card{background:#f8f9fa;border:1px solid #dee2e6;border-radius:5px;padding:10px}
-    .tip-card h4{font-size:11px;margin-bottom:5px;color:#495057}
-    .tip-card p{font-size:9px;margin:0}
-    .section-title{color:#FF4D06;font-size:16px;font-weight:bold;margin:25px 0 15px;border-bottom:1px solid #FED7AA;padding-bottom:5px}
-    .disclaimer{background:#f8f9fa;border:1px solid #dee2e6;border-radius:5px;padding:10px;margin-top:20px;font-size:9px;font-style:italic;color:#6c757d}
-    .footer{text-align:center;margin-top:30px;padding-top:15px;border-top:1px solid #ddd;font-size:9px;color:#999}
+    .tip-card h4{font-size:13px;margin-bottom:5px;color:#495057}
+    .tip-card p{font-size:11px;margin:0}
+    .section-title{color:#FF4D06;font-size:19px;font-weight:bold;margin:25px 0 15px;border-bottom:1px solid #FED7AA;padding-bottom:5px}
+    .disclaimer{background:#f8f9fa;border:1px solid #dee2e6;border-radius:5px;padding:10px;margin-top:20px;font-size:11px;font-style:italic;color:#6c757d}
+    .footer{text-align:center;margin-top:30px;padding-top:15px;border-top:1px solid #ddd;font-size:11px;color:#999}
     @media print{body{padding:15px}}
+    ${DIET_TABLE_CSS}
   </style>
 </head>
 <body>
   <div class="header">
     ${logoDataUrl ? `<img src="${logoDataUrl}" alt="Fitsush Logo"/>` : ''}
     <h1>${aiData.planName ?? planMeta.planName}</h1>
-    <p><span class="week-badge" style="margin-left:0">${planMeta.weekLabel}</span></p>
+    ${client?.name ? `<p>Customised diet plan for ${escapePlain(client.name)}</p>` : ''}
+    <p><span class="week-badge" style="margin-left:0">${planMeta.weekLabel}</span>${planMeta.dateRange ? ` ${planMeta.dateRange}` : ''}</p>
   </div>
 
-  <div class="client-details">
-    <h3>📋 Client Details</h3>
-    <div class="client-grid">
-      <div><span>Name:</span> ${client?.name ?? '--'}</div>
-      <div><span>Age:</span> ${age} years</div>
-      <div><span>Gender:</span> ${client?.gender ?? 'Not specified'}</div>
-      <div><span>Height/Weight:</span> ${client?.height ?? '--'}cm / ${client?.weight ?? '--'}kg</div>
-      <div><span>Skin Type:</span> ${client?.skin_type ?? 'Not specified'}</div>
-      <div><span>Hair Type:</span> ${client?.hair_type ?? 'Not specified'}</div>
-      <div><span>Goal:</span> ${client?.goal ?? 'Not specified'}</div>
-      <div><span>Diet Preference:</span> ${client?.diet_preference ?? 'Not specified'}</div>
-      <div><span>Date:</span> ${planMeta.dateRange}</div>
-      <div><span>Duration:</span> ${planMeta.duration} days</div>
-    </div>
-    ${healthConditions.length > 0 ? `
-    <div style="margin-top:10px">
-      <h4 style="font-size:10px;margin-bottom:5px;color:#555">Health Conditions:</h4>
-      ${healthConditions.map((c: string) => `<span class="condition-badge">${c}</span>`).join('')}
-    </div>` : ''}
-    ${client?.notes ? `<div style="margin-top:10px;font-size:10px"><strong>Notes:</strong> ${client.notes}</div>` : ''}
-  </div>
+  ${kycHtml(aiData.kyc ? { ...emptyKyc(), ...aiData.kyc } : clientKyc(client))}
 
   ${aiData.introMessage ? `<div class="intro"><p>${esc(aiData.introMessage)}</p></div>` : ''}
 
@@ -595,14 +641,14 @@ function buildRichAIPlanHtml(
 
   ${aiData.oilGuidelines ? `
   <div>
-    <h4 style="font-size:11px;color:#333;margin-bottom:6px">Use of Oils:</h4>
+    <h4 style="font-size:13px;color:#333;margin-bottom:6px">Use of Oils:</h4>
     <div class="oil-grid">
       <div class="oil-card"><h4>Cooking - Group A</h4><ul>${((aiData.oilGuidelines.cooking?.groupA ?? []) as string[]).map(o => `<li>- ${o}</li>`).join('')}</ul></div>
       <div class="oil-card"><h4>Cooking - Group B</h4><ul>${((aiData.oilGuidelines.cooking?.groupB ?? []) as string[]).map(o => `<li>- ${o}</li>`).join('')}</ul></div>
       <div class="oil-card"><h4>Raw/Topping</h4><ul>${((aiData.oilGuidelines.raw ?? []) as string[]).map(o => `<li>- ${o}</li>`).join('')}</ul></div>
       <div class="oil-card"><h4>Deep Frying</h4><ul>${((aiData.oilGuidelines.deepFrying ?? []) as string[]).map(o => `<li>- ${o}</li>`).join('')}</ul></div>
     </div>
-    <p style="font-style:italic;font-size:9px;color:#6c757d;margin:0">${aiData.oilGuidelines.note ?? ''}</p>
+    <p style="font-style:italic;font-size:11px;color:#6c757d;margin:0">${aiData.oilGuidelines.note ?? ''}</p>
   </div>` : ''}
 
   ${(aiData.importantNotes?.length ?? 0) > 0 ? `
@@ -673,7 +719,8 @@ export function buildPlanHtml(
   plan: any,
   opts: { recipes?: RecipeRow[]; affiliateProducts?: AffiliateProduct[]; logoDataUrl?: string } = {},
 ): string {
-  const { recipes = [], affiliateProducts = [], logoDataUrl = '' } = opts;
+  const { affiliateProducts = [], logoDataUrl = '' } = opts;
+  const recipes = applyRecipeEdits(opts.recipes ?? [], planRecipeEdits(plan));
   if (plan.is_ai_generated && plan.ai_plan_data) {
     return buildRichAIPlanHtml(plan.ai_plan_data, plan.clients ?? {}, aiPlanMeta(plan), recipes, affiliateProducts, logoDataUrl);
   }
