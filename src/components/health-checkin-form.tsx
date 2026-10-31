@@ -2,6 +2,7 @@ import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { X, ChevronRight, ChevronLeft, Check, Loader2 } from "lucide-react";
 import type { Client, ProgressEntry } from "@/lib/types";
+import { ErrorNote, BUTTON_PRIMARY, BUTTON_GHOST } from "@/components/ui-cards";
 
 // ---------------------------------------------------------------------------
 // Tiny reusable widgets (no external deps beyond what the PWA already uses)
@@ -15,9 +16,9 @@ function RatingButtons({ value, onChange }: { value: number | null; onChange: (n
           key={n}
           type="button"
           onClick={() => onChange(n)}
-          className={`h-9 w-9 rounded-xl text-sm font-semibold transition-colors ${
+          className={`h-10 w-10 rounded-full text-sm font-semibold transition-all active:scale-95 ${
             value === n
-              ? "bg-primary text-primary-foreground"
+              ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
               : "bg-muted text-muted-foreground hover:bg-primary/15"
           }`}
         >
@@ -44,9 +45,9 @@ function SegmentedPicker({
           key={o.value}
           type="button"
           onClick={() => onChange(o.value)}
-          className={`rounded-xl px-3 py-1.5 text-xs font-medium transition-colors ${
+          className={`rounded-full px-3.5 py-2 text-xs font-medium transition-all active:scale-95 ${
             value === o.value
-              ? "bg-primary text-primary-foreground"
+              ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
               : "bg-muted text-muted-foreground hover:bg-primary/15"
           }`}
         >
@@ -75,9 +76,9 @@ function MultiChips({
           key={o}
           type="button"
           onClick={() => toggle(o)}
-          className={`rounded-xl px-3 py-1.5 text-xs font-medium transition-colors ${
+          className={`rounded-full px-3.5 py-2 text-xs font-medium capitalize transition-all active:scale-95 ${
             value.includes(o)
-              ? "bg-primary text-primary-foreground"
+              ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
               : "bg-muted text-muted-foreground hover:bg-primary/15"
           }`}
         >
@@ -90,9 +91,9 @@ function MultiChips({
 
 function FieldRow({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
-    <div className="space-y-2">
+    <div className="space-y-2.5 rounded-3xl border bg-card p-4 shadow-sm">
       <div>
-        <p className="text-sm font-medium text-foreground">{label}</p>
+        <p className="text-sm font-semibold text-foreground">{label}</p>
         {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
       </div>
       {children}
@@ -124,7 +125,7 @@ function NumInput({
         step={step}
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value === "" ? null : parseFloat(e.target.value))}
-        className="h-10 w-28 rounded-xl border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+        className="h-11 w-28 rounded-2xl border bg-background px-3 text-sm focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/10"
       />
       {suffix && <span className="text-sm text-muted-foreground">{suffix}</span>}
     </div>
@@ -230,14 +231,14 @@ export function HealthCheckinForm({ clientProfile, onClose, onSaved }: Props) {
     {
       title: "Body & Daily Habits",
       content: (
-        <div className="space-y-6">
+        <div className="space-y-3">
           <FieldRow label="Date">
             <input
               type="date"
               value={form.entry_date}
               max={today}
               onChange={(e) => set("entry_date", e.target.value)}
-              className="h-10 rounded-xl border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+              className="h-11 rounded-2xl border bg-background px-3 text-sm focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/10"
             />
           </FieldRow>
           <FieldRow label="Weight">
@@ -281,7 +282,7 @@ export function HealthCheckinForm({ clientProfile, onClose, onSaved }: Props) {
     {
       title: "How are you feeling?",
       content: (
-        <div className="space-y-5">
+        <div className="space-y-3">
           {((isInfant
             ? [
                 ["sleep_quality_rating", "Sleep quality", "5 = sleeping very well"],
@@ -315,7 +316,7 @@ export function HealthCheckinForm({ clientProfile, onClose, onSaved }: Props) {
           {
             title: "Health Details",
             content: (
-              <div className="space-y-6">
+              <div className="space-y-3">
                 <FieldRow label="Stress level" hint="1 = very low · 5 = very high">
                   <RatingButtons value={form.stress_rating} onChange={(n) => set("stress_rating", n)} />
                 </FieldRow>
@@ -344,7 +345,7 @@ export function HealthCheckinForm({ clientProfile, onClose, onSaved }: Props) {
     {
       title: isInfant ? "Feeding" : branch === "female" ? "Women's Health" : branch === "male" ? "Men's Health" : "Child's Health",
       content: isInfant ? (
-        <div className="space-y-5">
+        <div className="space-y-3">
           <FieldRow label="Breastfed?">
             <SegmentedPicker
               options={[{ value: "yes", label: "Yes" }, { value: "no", label: "No" }]}
@@ -372,12 +373,12 @@ export function HealthCheckinForm({ clientProfile, onClose, onSaved }: Props) {
               rows={3}
               value={form.feeding_difficulties ?? ""}
               onChange={(e) => set("feeding_difficulties", e.target.value || null)}
-              className="w-full rounded-xl border bg-background p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 resize-none"
+              className="w-full rounded-2xl border bg-background p-3 text-sm focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/10 resize-none"
             />
           </FieldRow>
         </div>
       ) : branch === "female" ? (
-        <div className="space-y-5">
+        <div className="space-y-3">
           <FieldRow label="Periods status">
             <SegmentedPicker
               options={[{ value: "regular", label: "Regular" }, { value: "irregular", label: "Irregular" }, { value: "absent", label: "Absent" }, { value: "menopausal", label: "Menopausal" }]}
@@ -404,7 +405,7 @@ export function HealthCheckinForm({ clientProfile, onClose, onSaved }: Props) {
           </FieldRow>
         </div>
       ) : branch === "male" ? (
-        <div className="space-y-5">
+        <div className="space-y-3">
           <FieldRow label="Libido" hint="1 = very low · 5 = excellent">
             <RatingButtons value={form.libido_rating} onChange={(n) => set("libido_rating", n)} />
           </FieldRow>
@@ -417,7 +418,7 @@ export function HealthCheckinForm({ clientProfile, onClose, onSaved }: Props) {
           </FieldRow>
         </div>
       ) : (
-        <div className="space-y-5">
+        <div className="space-y-3">
           {([["stamina_rating", "Stamina"], ["attention_rating", "Attention span"], ["memory_rating", "Memory"], ["focus_rating", "Focus"]] as [keyof FormState, string][]).map(([k, label]) => (
             <FieldRow key={k} label={label} hint="1 = very poor · 5 = excellent">
               <RatingButtons value={form[k] as number | null} onChange={(n) => set(k, n)} />
@@ -445,7 +446,7 @@ export function HealthCheckinForm({ clientProfile, onClose, onSaved }: Props) {
             placeholder="How are you feeling overall? Any changes since last check-in?"
             value={form.notes ?? ""}
             onChange={(e) => set("notes", e.target.value || null)}
-            className="w-full rounded-xl border bg-background p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 resize-none"
+            className="w-full rounded-2xl border bg-background p-3 text-sm focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/10 resize-none"
           />
         </div>
       ),
@@ -456,63 +457,66 @@ export function HealthCheckinForm({ clientProfile, onClose, onSaved }: Props) {
   const isLast = step === steps.length - 1;
 
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col bg-background">
+    <div className="fixed inset-0 z-[100] flex flex-col bg-background animate-in fade-in slide-in-from-bottom-8">
       {/* Header */}
-      <div className="flex items-center justify-between border-b px-4 py-3">
-        <div>
-          <p className="text-xs text-muted-foreground">Step {step + 1} of {steps.length}</p>
-          <h2 className="text-base font-semibold text-foreground">{current.title}</h2>
+      <div className="border-b border-border/60 bg-background/80 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
+        <div className="mx-auto flex max-w-lg items-start justify-between gap-3 px-4 pt-3">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-primary">
+              Step {step + 1} of {steps.length}
+            </p>
+            <h2 className="font-display text-xl font-bold text-foreground">{current.title}</h2>
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition-transform hover:bg-muted active:scale-95"
+          >
+            <X className="h-5 w-5" />
+          </button>
         </div>
-        <button onClick={onClose} className="rounded-xl p-2 text-muted-foreground hover:bg-muted">
-          <X className="h-5 w-5" />
-        </button>
-      </div>
-
-      {/* Progress bar */}
-      <div className="h-1 bg-muted">
-        <div className="h-1 bg-primary transition-all" style={{ width: `${((step + 1) / steps.length) * 100}%` }} />
+        {/* Progress bar */}
+        <div className="mx-auto max-w-lg px-4 pb-3 pt-3">
+          <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-primary to-hero-glow transition-all"
+              style={{ width: `${((step + 1) / steps.length) * 100}%` }}
+            />
+          </div>
+        </div>
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto px-4 py-5">
-        {current.content}
+      <div className="flex-1 overflow-y-auto">
+        <div className="mx-auto max-w-lg px-4 py-5">{current.content}</div>
       </div>
 
       {/* Footer */}
-      {error && (
-        <div className="mx-4 mb-2 rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          {error}
-        </div>
-      )}
-      <div className="flex items-center justify-between border-t bg-background px-4 py-3">
-        <button
-          type="button"
-          disabled={step === 0}
-          onClick={() => setStep((s) => s - 1)}
-          className="flex items-center gap-1 rounded-xl px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted disabled:opacity-40"
-        >
-          <ChevronLeft className="h-4 w-4" /> Back
-        </button>
+      <div className="border-t border-border/60 bg-background/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl">
+        <div className="mx-auto max-w-lg px-4 py-3">
+          {error && <div className="mb-3"><ErrorNote>{error}</ErrorNote></div>}
+          <div className="flex items-center justify-between">
+            <button
+              type="button"
+              disabled={step === 0}
+              onClick={() => setStep((s) => s - 1)}
+              className={BUTTON_GHOST}
+            >
+              <ChevronLeft className="h-4 w-4" /> Back
+            </button>
 
-        {isLast ? (
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={saving}
-            className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-          >
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-            Submit Check-in
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setStep((s) => s + 1)}
-            className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
-          >
-            Continue <ChevronRight className="h-4 w-4" />
-          </button>
-        )}
+            {isLast ? (
+              <button type="button" onClick={handleSubmit} disabled={saving} className={BUTTON_PRIMARY}>
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                Submit check-in
+              </button>
+            ) : (
+              <button type="button" onClick={() => setStep((s) => s + 1)} className={BUTTON_PRIMARY}>
+                Next <ChevronRight className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

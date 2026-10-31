@@ -63,18 +63,23 @@ function rememberDismissed() {
   }
 }
 
-export function InstallPrompt() {
-  const [mode, setMode] = React.useState<"native" | "ios" | null>(null);
+// How this browser can install the app right now. Shared by the popup and
+// the Profile page's "Install the app" card.
+export type InstallMode = "native" | "ios" | "installed" | "unavailable";
+
+export function useInstall(): { mode: InstallMode; install: () => Promise<"accepted" | "dismissed" | null> } {
+  const [mode, setMode] = React.useState<InstallMode>("unavailable");
 
   React.useEffect(() => {
-    if (isStandalone() || recentlyDismissed()) return;
-
+    if (isStandalone()) {
+      setMode("installed");
+      return;
+    }
     if (isIos()) {
       setMode("ios");
       return;
     }
-
-    const sync = () => setMode(deferredPrompt ? "native" : null);
+    const sync = () => setMode(deferredPrompt ? "native" : "unavailable");
     sync();
     promptListeners.add(sync);
     return () => {
@@ -82,24 +87,38 @@ export function InstallPrompt() {
     };
   }, []);
 
-  const close = () => {
-    rememberDismissed();
-    setMode(null);
-  };
-
   const install = async () => {
     const evt = deferredPrompt;
-    if (!evt) return;
+    if (!evt) return null;
     await evt.prompt();
     const { outcome } = await evt.userChoice;
     deferredPrompt = null;
+    promptListeners.forEach((fn) => fn());
+    return outcome;
+  };
+
+  return { mode, install };
+}
+
+export function InstallPrompt() {
+  const { mode: available, install: runInstall } = useInstall();
+  const [dismissed, setDismissed] = React.useState(() => typeof window === "undefined" || recentlyDismissed());
+  const mode = !dismissed && (available === "native" || available === "ios") ? available : null;
+
+  const close = () => {
+    rememberDismissed();
+    setDismissed(true);
+  };
+
+  const install = async () => {
+    const outcome = await runInstall();
     if (outcome === "dismissed") rememberDismissed();
-    setMode(null);
+    setDismissed(true);
   };
 
   return (
     <Dialog open={mode !== null} onOpenChange={(open) => !open && close()}>
-      <DialogContent className="max-w-[calc(100%-2rem)] rounded-2xl sm:max-w-sm">
+      <DialogContent className="max-w-[calc(100%-2rem)] rounded-3xl sm:max-w-sm">
         <DialogHeader className="items-center text-center sm:text-center">
           <img src="/icons/icon-192.png" alt="" className="mb-1 h-16 w-16 rounded-2xl border" />
           <DialogTitle>Install the Fitsush app</DialogTitle>
@@ -110,7 +129,7 @@ export function InstallPrompt() {
         </DialogHeader>
 
         {mode === "ios" ? (
-          <ol className="space-y-3 rounded-xl bg-muted/50 p-4 text-sm">
+          <ol className="space-y-3 rounded-2xl bg-muted/50 p-4 text-sm">
             <li className="flex items-center gap-3">
               <Share className="h-5 w-5 shrink-0 text-primary" />
               <span>
@@ -131,7 +150,7 @@ export function InstallPrompt() {
             <button
               type="button"
               onClick={install}
-              className="flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+              className="flex items-center justify-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 transition-transform hover:bg-primary/90 active:scale-95"
             >
               <Download className="h-4 w-4" />
               Install
@@ -140,7 +159,7 @@ export function InstallPrompt() {
           <button
             type="button"
             onClick={close}
-            className="rounded-xl px-4 py-2.5 text-sm font-medium text-muted-foreground hover:bg-muted"
+            className="rounded-full px-4 py-2.5 text-sm font-medium text-muted-foreground transition-transform hover:bg-muted active:scale-95"
           >
             {mode === "ios" ? "Got it" : "Not now"}
           </button>

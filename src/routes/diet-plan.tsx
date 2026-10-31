@@ -1,12 +1,25 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/hooks/use-auth";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import type { DietPlan, ClientDietPlanFile, Client } from "@/lib/types";
 import { PageShell } from "@/components/app-shell";
-import { EmptyState, LoadingSpinner } from "@/components/ui-cards";
-import { Utensils, CalendarDays, FileText, Download, Eye, FileDown, ShoppingCart, ExternalLink, Loader2 } from "lucide-react";
-import { downloadDietPlanPdf } from "@/lib/dietPlanPdf";
+import {
+  EmptyState,
+  LoadingSpinner,
+  PageHero,
+  HeroProgress,
+  SectionCard,
+  ErrorNote,
+  HERO_BUTTON_PRIMARY,
+  BUTTON_OUTLINE,
+  CHIP_TINT,
+  NO_SCROLLBAR,
+  formatLongDate,
+} from "@/components/ui-cards";
+import { Utensils, CalendarDays, FileText, Download, Eye, ShoppingCart, ExternalLink, Loader2, Salad, StickyNote, ChevronDown } from "lucide-react";
+import { downloadDietPlanPdf, fetchPlanDays } from "@/lib/dietPlanPdf";
+import { planDayGroups, planDayProgress, todayGroupIndex } from "@/lib/planDays";
 
 const PRIMARY_BUCKET = "diet-plan-pdfs";
 const FALLBACK_BUCKET = "diet-pdfs";
@@ -34,6 +47,9 @@ function DietPlanPage() {
   const [loading, setLoading] = useState(true);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [manualDays, setManualDays] = useState<any[]>([]);
+  const [selectedGroup, setSelectedGroup] = useState(0);
+  const [instructionsOpen, setInstructionsOpen] = useState(false);
   const [affiliateProducts, setAffiliateProducts] = useState<{ product_name: string; link: string; product_name_normalized: string }[]>([]);
 
   useEffect(() => {
@@ -159,6 +175,26 @@ function DietPlanPage() {
     load();
   }, [clientProfile]);
 
+  // Manual plans keep their meals in diet_plan_days (AI plans carry them in ai_plan_data).
+  useEffect(() => {
+    if (!activePlan?.is_published || (activePlan.is_ai_generated && activePlan.ai_plan_data)) {
+      setManualDays([]);
+      return;
+    }
+    fetchPlanDays(activePlan.id).then(setManualDays);
+  }, [activePlan]);
+
+  const dayGroups = useMemo(
+    // Only a published plan's meals are shown — drafts may still change.
+    () => (activePlan?.is_published ? planDayGroups(activePlan, manualDays) : []),
+    [activePlan, manualDays]
+  );
+  const todayIndex = useMemo(
+    () => (activePlan ? todayGroupIndex(dayGroups, planDayProgress(activePlan)?.day) : 0),
+    [activePlan, dayGroups]
+  );
+  useEffect(() => setSelectedGroup(todayIndex), [todayIndex]);
+
   // Same chart layout as PMS's download (shared dietPlanHtml.ts).
   const downloadPlanPdf = async (plan: DietPlan) => {
     const key = `pdf-${plan.id}`;
@@ -212,224 +248,266 @@ function DietPlanPage() {
     }
   };
 
-  if (authLoading || !isAuthenticated) return <LoadingSpinner />;
+  if (authLoading || !isAuthenticated) return <LoadingSpinner fullScreen />;
+
+  const progress = activePlan ? planDayProgress(activePlan) : null;
+  const dateRange = (plan: DietPlan) =>
+    plan.start_date || plan.end_date
+      ? `${plan.start_date ? formatLongDate(plan.start_date) : "—"} → ${plan.end_date ? formatLongDate(plan.end_date) : "Ongoing"}`
+      : null;
+  const filesFor = (plan: DietPlan) =>
+    pdfs.filter(
+      (f) =>
+        f.key === `p-${plan.id}` ||
+        (f.source === "client_diet_plan_files" && (f as any).diet_plan_id === plan.id)
+    );
+  const group = dayGroups[selectedGroup] ?? null;
 
   return (
-    <PageShell title="My Diet Plan">
+    <PageShell title="Diet Plan">
       {loading ? (
         <LoadingSpinner />
       ) : (
-        <div className="space-y-6">
-          {/* Active plan summary */}
+        <div className="space-y-4">
           {!activePlan ? (
             <EmptyState
-              icon={<Utensils className="h-10 w-10" />}
+              icon={<Utensils className="h-6 w-6" />}
               title="No active diet plan"
-              description="Your nutritionist hasn't published a plan yet. Past plan PDFs (if any) are listed below."
+              description="Your nutritionist hasn't published a plan yet. Past plans (if any) are listed below."
             />
           ) : (
-            <div className="rounded-2xl border bg-card p-5">
-              <div className="mb-3 flex items-center gap-2">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10">
-                  <Utensils className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                  <h2 className="font-display text-base font-bold text-foreground">
-                    {activePlan.plan_name ?? "Diet Plan"}
-                  </h2>
-                  <span className="inline-block rounded-full bg-success/15 px-2 py-0.5 text-xs font-medium text-success">
-                    {activePlan.status}
-                  </span>
-                </div>
-              </div>
-
-              {(activePlan.start_date || activePlan.end_date) && (
-                <div className="mb-4 flex items-center gap-2 text-sm text-muted-foreground">
-                  <CalendarDays className="h-4 w-4" />
-                  <span>
-                    {activePlan.start_date
-                      ? new Date(activePlan.start_date).toLocaleDateString("en-IN", {
-                          day: "numeric",
-                          month: "short",
-                          year: "numeric",
-                        })
-                      : "—"}
-                    {" → "}
-                    {activePlan.end_date
-                      ? new Date(activePlan.end_date).toLocaleDateString("en-IN", {
-                          day: "numeric",
-                          month: "short",
-                          year: "numeric",
-                        })
-                      : "Ongoing"}
-                  </span>
+            <PageHero
+              eyebrow={activePlan.is_published ? "Your current plan" : "Plan in progress"}
+              title={activePlan.plan_name ?? "Diet Plan"}
+              subtitle={dateRange(activePlan) ?? undefined}
+              icon={<Utensils className="h-5 w-5" />}
+            >
+              {progress && (
+                <div className="mb-4 space-y-1.5">
+                  <div className="flex items-baseline justify-between text-xs text-white/85">
+                    <span>
+                      Day {progress.day}
+                      {progress.total ? ` of ${progress.total}` : ""}
+                    </span>
+                    {progress.total ? <span>{Math.round(progress.pct)}%</span> : null}
+                  </div>
+                  {progress.total ? <HeroProgress pct={progress.pct} /> : null}
                 </div>
               )}
-
-              {activePlan.instructions && (
-                <div className="rounded-xl bg-muted/50 p-4">
-                  <div className="mb-2 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    <FileText className="h-3.5 w-3.5" />
-                    Instructions
-                  </div>
-                  <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-                    {activePlan.instructions}
-                  </div>
-                </div>
+              {activePlan.is_published && (
+                <button
+                  type="button"
+                  onClick={() => downloadPlanPdf(activePlan)}
+                  disabled={busyKey === `pdf-${activePlan.id}`}
+                  className={HERO_BUTTON_PRIMARY}
+                >
+                  {busyKey === `pdf-${activePlan.id}` ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Download className="h-3.5 w-3.5" />
+                  )}
+                  {busyKey === `pdf-${activePlan.id}` ? "Preparing PDF…" : "Download PDF"}
+                </button>
               )}
-
-            </div>
+            </PageHero>
           )}
 
-          {/* All published plans — one card per plan with Download button */}
-          <div>
-            <h3 className="mb-3 font-display text-sm font-semibold text-foreground">
-              All Published Plans
-            </h3>
+          {/* Meals by day — the day matching today is picked first */}
+          {activePlan && dayGroups.length > 0 && (
+            <SectionCard
+              icon={<Salad className="h-4 w-4" />}
+              title={selectedGroup === todayIndex ? "Today's meals" : "Meals"}
+              subtitle={group ? [group.label, group.sub].filter(Boolean).join(" · ") : undefined}
+            >
+              {dayGroups.length > 1 && (
+                <div className={`-mx-5 mb-4 flex gap-2 overflow-x-auto px-5 ${NO_SCROLLBAR}`}>
+                  {dayGroups.map((g, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => setSelectedGroup(i)}
+                      className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all active:scale-95 ${
+                        i === selectedGroup
+                          ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
+                          : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {i === todayIndex ? `Today · ${g.label}` : g.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {group && group.meals.length > 0 ? (
+                <ol className="space-y-3">
+                  {group.meals.map((m, i) => (
+                    <li key={i} className="rounded-2xl bg-muted/50 p-4">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <p className="font-display text-sm font-bold text-foreground">{m.label}</p>
+                        {m.time && <span className="text-xs font-medium text-muted-foreground">{m.time}</span>}
+                      </div>
+                      {m.options.length === 1 ? (
+                        <p className="mt-1 whitespace-pre-line text-sm leading-relaxed text-foreground">{m.options[0]}</p>
+                      ) : (
+                        <ul className="mt-2 space-y-1.5">
+                          {m.options.map((o, oi) => (
+                            <li key={oi} className="flex gap-2 text-sm leading-relaxed text-foreground">
+                              <span className="mt-0.5 shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
+                                {oi + 1}
+                              </span>
+                              <span className="whitespace-pre-line">{o}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      {m.alternative && (
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          <span className="font-semibold">Alternative:</span> {m.alternative}
+                        </p>
+                      )}
+                      {m.notes && <p className="mt-1 text-xs italic text-muted-foreground">{m.notes}</p>}
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="text-sm text-muted-foreground">No meals listed for this day.</p>
+              )}
+              {group?.notes && (
+                <p className="mt-3 whitespace-pre-line rounded-2xl bg-warning/10 px-4 py-3 text-xs text-foreground">{group.notes}</p>
+              )}
+            </SectionCard>
+          )}
 
+          {activePlan?.instructions && (
+            <SectionCard
+              icon={<StickyNote className="h-4 w-4" />}
+              iconClassName={CHIP_TINT.notes}
+              title="Instructions"
+            >
+              <p
+                className={`whitespace-pre-wrap text-sm leading-relaxed text-foreground ${
+                  instructionsOpen ? "" : "line-clamp-6"
+                }`}
+              >
+                {activePlan.instructions}
+              </p>
+              {activePlan.instructions.length > 300 && (
+                <button
+                  type="button"
+                  onClick={() => setInstructionsOpen((v) => !v)}
+                  className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-primary"
+                >
+                  {instructionsOpen ? "Show less" : "Read more"}
+                  <ChevronDown className={`h-3.5 w-3.5 transition-transform ${instructionsOpen ? "rotate-180" : ""}`} />
+                </button>
+              )}
+            </SectionCard>
+          )}
+
+          {/* All published plans — one row per plan with Download button */}
+          <SectionCard
+            icon={<FileText className="h-4 w-4" />}
+            iconClassName={CHIP_TINT.info}
+            title="All published plans"
+            subtitle={publishedPlans.length ? `${publishedPlans.length} plan${publishedPlans.length === 1 ? "" : "s"}` : undefined}
+          >
             {publishedPlans.length === 0 ? (
-              <EmptyState
-                icon={<FileDown className="h-10 w-10" />}
-                title="No published plans yet"
-                description="Your nutritionist will publish your diet plan here when it's ready."
-              />
+              <p className="text-sm text-muted-foreground">
+                Your nutritionist will publish your diet plan here when it's ready.
+              </p>
             ) : (
               <ul className="space-y-3">
                 {publishedPlans.map((plan) => {
                   const isCurrent = plan.id === activePlan?.id;
+                  const files = filesFor(plan);
                   return (
-                    <li key={plan.id} className="rounded-2xl border bg-card p-4">
-                      <div className="flex items-start gap-3">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-                          <FileText className="h-5 w-5 text-primary" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-sm font-semibold text-foreground">
-                              {plan.plan_name ?? "Diet Plan"}
-                            </p>
-                            {isCurrent && (
-                              <span className="rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-success">
-                                Current
-                              </span>
-                            )}
-                          </div>
-                          {(plan.start_date || plan.end_date) && (
-                            <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-                              <CalendarDays className="h-3 w-3 shrink-0" />
-                              <span>
-                                {plan.start_date
-                                  ? new Date(plan.start_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
-                                  : "—"}
-                                {" → "}
-                                {plan.end_date
-                                  ? new Date(plan.end_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
-                                  : "Ongoing"}
-                              </span>
-                            </div>
-                          )}
-                          {plan.published_at && (
-                            <p className="mt-0.5 text-xs text-muted-foreground">
-                              Published{" "}
-                              {new Date(plan.published_at).toLocaleDateString("en-IN", {
-                                day: "numeric",
-                                month: "short",
-                                year: "numeric",
-                              })}
-                            </p>
-                          )}
-                          {plan.instructions && (
-                            <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-                              {plan.instructions}
-                            </p>
-                          )}
-                        </div>
+                    <li key={plan.id} className="rounded-2xl border p-4">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-semibold text-foreground">{plan.plan_name ?? "Diet Plan"}</p>
+                        {isCurrent && (
+                          <span className="rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-success">
+                            Current
+                          </span>
+                        )}
                       </div>
-
-                      {/* Uploaded file — View / Download via signed URL if available */}
-                      {pdfs.filter((f) =>
-                        f.key === `p-${plan.id}` ||
-                        (f.source === "client_diet_plan_files" &&
-                          (f as any).diet_plan_id === plan.id)
-                      ).length > 0 && (
-                        <div className="mt-3 flex gap-2">
-                          {pdfs
-                            .filter((f) =>
-                              f.key === `p-${plan.id}` ||
-                              (f.source === "client_diet_plan_files" &&
-                                (f as any).diet_plan_id === plan.id)
-                            )
-                            .slice(0, 1)
-                            .map((f) => (
-                              <>
-                                <button
-                                  key={`view-${f.key}`}
-                                  onClick={() => openSignedUrl(f, "view")}
-                                  disabled={busyKey === f.key}
-                                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border bg-background px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-50"
-                                >
-                                  <Eye className="h-4 w-4" />
-                                  View File
-                                </button>
-                                <button
-                                  key={`dl-${f.key}`}
-                                  onClick={() => openSignedUrl(f, "download")}
-                                  disabled={busyKey === f.key}
-                                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border bg-background px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-50"
-                                >
-                                  <Download className="h-4 w-4" />
-                                  Download File
-                                </button>
-                              </>
-                            ))}
-                        </div>
+                      {dateRange(plan) && (
+                        <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <CalendarDays className="h-3 w-3 shrink-0" />
+                          {dateRange(plan)}
+                        </p>
+                      )}
+                      {plan.published_at && (
+                        <p className="mt-0.5 text-xs text-muted-foreground">Published {formatLongDate(plan.published_at)}</p>
                       )}
 
-                      {/* Always-available client-side PDF generation */}
-                      <button
-                        onClick={() => downloadPlanPdf(plan)}
-                        disabled={busyKey === `pdf-${plan.id}`}
-                        className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
-                      >
-                        {busyKey === `pdf-${plan.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                        {busyKey === `pdf-${plan.id}` ? "Preparing PDF..." : "Download PDF"}
-                      </button>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {/* Uploaded file — View / Download via signed URL if available */}
+                        {files.slice(0, 1).map((f) => (
+                          <span key={f.key} className="contents">
+                            <button
+                              onClick={() => openSignedUrl(f, "view")}
+                              disabled={busyKey === f.key}
+                              className={BUTTON_OUTLINE}
+                            >
+                              <Eye className="h-3.5 w-3.5" />
+                              View file
+                            </button>
+                            <button
+                              onClick={() => openSignedUrl(f, "download")}
+                              disabled={busyKey === f.key}
+                              className={BUTTON_OUTLINE}
+                            >
+                              <Download className="h-3.5 w-3.5" />
+                              Download file
+                            </button>
+                          </span>
+                        ))}
+                        {/* Always-available client-side PDF generation */}
+                        <button
+                          onClick={() => downloadPlanPdf(plan)}
+                          disabled={busyKey === `pdf-${plan.id}`}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-full bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow-md shadow-primary/25 transition-transform hover:bg-primary/90 active:scale-95 disabled:opacity-60"
+                        >
+                          {busyKey === `pdf-${plan.id}` ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Download className="h-3.5 w-3.5" />
+                          )}
+                          {busyKey === `pdf-${plan.id}` ? "Preparing PDF…" : "Download PDF"}
+                        </button>
+                      </div>
                     </li>
                   );
                 })}
               </ul>
             )}
 
-            {/* Error from signed-URL generation */}
-            {errorMsg && (
-              <div className="mt-3 rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive">
-                {errorMsg}
-              </div>
-            )}
-          </div>
+            {/* Error from PDF / signed-URL generation */}
+            {errorMsg && <div className="mt-3"><ErrorNote>{errorMsg}</ErrorNote></div>}
+          </SectionCard>
 
           {/* Affiliate product links matched from grocery list */}
           {affiliateProducts.length > 0 && (
-            <div>
-              <h3 className="mb-3 font-display text-sm font-semibold text-foreground flex items-center gap-2">
-                <ShoppingCart className="h-4 w-4 text-primary" />
-                Shop Recommended Products
-              </h3>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <SectionCard
+              icon={<ShoppingCart className="h-4 w-4" />}
+              iconClassName={CHIP_TINT.success}
+              title="Shop recommended products"
+              subtitle="From your plan's grocery list"
+            >
+              <div className="space-y-2">
                 {affiliateProducts.map((p) => (
                   <a
                     key={p.product_name_normalized}
                     href={p.link}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center justify-between gap-3 rounded-2xl border bg-card px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+                    className="flex items-center justify-between gap-3 rounded-2xl bg-muted/50 px-4 py-3 text-sm font-medium text-foreground transition-transform hover:bg-muted active:scale-[0.98]"
                   >
                     <span className="truncate">{p.product_name}</span>
                     <ExternalLink className="h-4 w-4 shrink-0 text-muted-foreground" />
                   </a>
                 ))}
               </div>
-            </div>
+            </SectionCard>
           )}
         </div>
       )}

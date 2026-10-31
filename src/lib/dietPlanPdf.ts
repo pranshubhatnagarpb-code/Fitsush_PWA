@@ -48,7 +48,7 @@ async function fetchRecipesForManualPlan(days: any[]): Promise<RecipeRow[]> {
 }
 
 // Manual plans keep their meals in diet_plan_days (the PWA's plan row doesn't include them).
-async function fetchPlanDays(planId: string): Promise<any[]> {
+export async function fetchPlanDays(planId: string): Promise<any[]> {
   const { data } = await supabase
     .from("diet_plan_days")
     .select(`

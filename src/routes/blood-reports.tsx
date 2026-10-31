@@ -13,17 +13,24 @@ import {
   type MarkerStatus,
 } from "@/lib/bloodMarkers";
 import { PageShell } from "@/components/app-shell";
-import { EmptyState, LoadingSpinner } from "@/components/ui-cards";
-import { FlaskConical, Plus, X, FileText, Stethoscope } from "lucide-react";
 import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
+  EmptyState,
+  LoadingSpinner,
+  PageHero,
+  HeroStat,
+  SectionCard,
+  TrendChart,
+  BottomSheet,
+  ErrorNote,
+  HERO_BUTTON_PRIMARY,
+  BUTTON_PRIMARY,
+  BUTTON_GHOST,
+  CHIP_TINT,
+  INPUT,
+  MICRO_LABEL,
+  formatLongDate,
+} from "@/components/ui-cards";
+import { FlaskConical, Plus, FileText, Stethoscope, History } from "lucide-react";
 
 export const Route = createFileRoute("/blood-reports")({
   component: BloodReportsPage,
@@ -190,90 +197,66 @@ function BloodReportsPage() {
     }).filter((t) => t.series.length >= 2);
   }, [reports]);
 
-  if (authLoading || !isAuthenticated) return <LoadingSpinner />;
+  if (authLoading || !isAuthenticated) return <LoadingSpinner fullScreen />;
+
+  const latestDated = [...reports].reverse().find((r) => r.report_date);
+  const clinicCount = reports.filter((r) => r.source === "clinic").length;
 
   return (
-    <PageShell title="Blood Reports">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">
-          Blood reports from your nutritionist and the ones you log, with key markers tracked over time.
-        </p>
-        {clientProfile && (
-          <button
-            type="button"
-            onClick={() => setShowForm(true)}
-            className="flex items-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
-          >
-            <Plus className="h-4 w-4" />
-            Add
-          </button>
-        )}
-      </div>
-
-      {loading ? (
-        <LoadingSpinner />
-      ) : reports.length === 0 ? (
-        <EmptyState
-          icon={<FlaskConical className="h-10 w-10" />}
-          title="No blood reports yet"
-          description='Tap "Add" to log a blood test, or your nutritionist will add one for you.'
-        />
-      ) : (
-        <div className="space-y-6">
-          {trends.length > 0 && (
-            <div className="space-y-4">
-              <h3 className="font-display text-sm font-semibold text-foreground">Trends</h3>
-              {trends.map((t) => (
-                <div key={t.key} className="rounded-2xl border bg-card p-4">
-                  <div className="mb-3 flex items-center gap-2">
-                    <FlaskConical className="h-4 w-4 text-muted-foreground" />
-                    <h4 className="text-sm font-semibold text-foreground">
-                      {t.label}{t.unit ? ` (${t.unit})` : ""}
-                    </h4>
-                  </div>
-                  <ResponsiveContainer width="100%" height={180}>
-                    <LineChart data={t.series}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                      <XAxis
-                        dataKey="date"
-                        tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-                        axisLine={false}
-                        tickLine={false}
-                      />
-                      <YAxis
-                        tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-                        axisLine={false}
-                        tickLine={false}
-                        domain={["auto", "auto"]}
-                      />
-                      <Tooltip
-                        contentStyle={{
-                          background: "var(--card)",
-                          border: "1px solid var(--border)",
-                          borderRadius: "0.75rem",
-                          fontSize: 12,
-                        }}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="value"
-                        stroke="var(--primary)"
-                        strokeWidth={2.5}
-                        dot={{ fill: "var(--primary)", r: 3 }}
-                        activeDot={{ r: 5 }}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              ))}
-            </div>
+    <PageShell title="Reports">
+      <div className="space-y-4">
+        <PageHero
+          eyebrow="Blood reports"
+          title="Your lab results"
+          subtitle="Reports from your nutritionist and the ones you log, tracked over time"
+          icon={<FlaskConical className="h-5 w-5" />}
+        >
+          <div className="grid grid-cols-3 gap-2">
+            <HeroStat label="Reports" value={loading ? "—" : reports.length} />
+            <HeroStat
+              label="Latest"
+              value={latestDated?.report_date ? new Date(latestDated.report_date).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : "—"}
+              hint={latestDated?.report_date ? String(new Date(latestDated.report_date).getFullYear()) : undefined}
+            />
+            <HeroStat label="Trends" value={loading ? "—" : trends.length} hint={trends.length ? "markers" : undefined} />
+          </div>
+          {clientProfile && (
+            <button type="button" onClick={() => setShowForm(true)} className={`mt-4 ${HERO_BUTTON_PRIMARY}`}>
+              <Plus className="h-3.5 w-3.5" />
+              Log a report
+            </button>
           )}
+        </PageHero>
 
-          <div>
-            <h3 className="mb-3 font-display text-sm font-semibold text-foreground">
-              Report History
-            </h3>
-            <div className="space-y-2">
+        {loading ? (
+          <LoadingSpinner />
+        ) : reports.length === 0 ? (
+          <EmptyState
+            icon={<FlaskConical className="h-6 w-6" />}
+            title="No blood reports yet"
+            description='Tap "Log a report" to add a blood test, or your nutritionist will add one for you.'
+          />
+        ) : (
+          <>
+            {trends.map((t) => (
+              <SectionCard
+                key={t.key}
+                icon={<FlaskConical className="h-4 w-4" />}
+                iconClassName={CHIP_TINT.health}
+                title={t.label}
+                subtitle={`${t.series.length} readings${t.unit ? ` · ${t.unit}` : ""}${rangeText(t.key, profile) ? ` · range ${rangeText(t.key, profile)}` : ""}`}
+              >
+                <TrendChart id={t.key} data={t.series} unit={t.unit} />
+              </SectionCard>
+            ))}
+
+            <SectionCard
+              icon={<History className="h-4 w-4" />}
+              iconClassName={CHIP_TINT.info}
+              title="Report history"
+              subtitle={`${reports.length} report${reports.length === 1 ? "" : "s"}${clinicCount ? ` · ${clinicCount} from your nutritionist` : ""}`}
+            >
+              <div className="space-y-2">
               {[...reports].reverse().map((r) => {
                 // Group the values by panel (Sugar, Lipids, Thyroid, …) in marker order.
                 const groups: Array<{ group: string; items: Array<{ key: BloodMarkerKey; value: number }> }> = [];
@@ -285,9 +268,9 @@ function BloodReportsPage() {
                   g.items.push({ key: m.key, value });
                 }
                 return (
-                  <div key={r.id} className="rounded-2xl border bg-card p-4">
-                    <div className="mb-2 flex items-center gap-2">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10">
+                  <div key={r.id} className="rounded-2xl bg-muted/50 p-4">
+                    <div className="mb-3 flex items-center gap-3">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-card">
                         {r.source === "clinic" ? (
                           <Stethoscope className="h-4 w-4 text-primary" />
                         ) : (
@@ -296,13 +279,7 @@ function BloodReportsPage() {
                       </div>
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-foreground">
-                          {r.report_date
-                            ? new Date(r.report_date).toLocaleDateString("en-IN", {
-                                day: "numeric",
-                                month: "long",
-                                year: "numeric",
-                              })
-                            : "Undated report"}
+                          {r.report_date ? formatLongDate(r.report_date) : "Undated report"}
                         </p>
                         <p className="text-[11px] text-muted-foreground">
                           {r.source === "clinic"
@@ -363,10 +340,11 @@ function BloodReportsPage() {
                   </div>
                 );
               })}
-            </div>
-          </div>
-        </div>
-      )}
+              </div>
+            </SectionCard>
+          </>
+        )}
+      </div>
 
       {showForm && clientProfile && (
         <BloodReportForm
@@ -437,96 +415,64 @@ function BloodReportForm({ clientId, onClose, onSaved }: FormProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center">
-      <div className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-background p-5 sm:rounded-2xl">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="font-display text-lg font-bold text-foreground">
-            Add Blood Report
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"
-            aria-label="Close"
-          >
-            <X className="h-4 w-4" />
-          </button>
+    <BottomSheet title="Log blood report" onClose={onClose}>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className={`mb-1.5 block ${MICRO_LABEL}`}>Report date</label>
+          <input
+            type="date"
+            value={date}
+            max={today}
+            required
+            onChange={(e) => setDate(e.target.value)}
+            className={INPUT}
+          />
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Report Date
-            </label>
-            <input
-              type="date"
-              value={date}
-              max={today}
-              required
-              onChange={(e) => setDate(e.target.value)}
-              className="w-full rounded-xl border bg-card px-4 py-2.5 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            {TRACKED_KEYS.map((t) => (
-              <div key={t.key}>
-                <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  {t.label} <span className="lowercase">({t.unit})</span>
-                </label>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  step="0.01"
-                  min="0"
-                  value={values[t.key] ?? ""}
-                  onChange={(e) => setVal(t.key, e.target.value)}
-                  placeholder="—"
-                  className="w-full rounded-xl border bg-card px-3 py-2.5 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                />
-              </div>
-            ))}
-          </div>
-
-          <div>
-            <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Notes (optional)
-            </label>
-            <textarea
-              rows={2}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              maxLength={500}
-              placeholder="Lab name, doctor, observations…"
-              className="w-full rounded-xl border bg-card px-4 py-2.5 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-            />
-          </div>
-
-          {error && (
-            <div className="rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive">
-              {error}
+        <div className="grid grid-cols-2 gap-3">
+          {TRACKED_KEYS.map((t) => (
+            <div key={t.key}>
+              <label className={`mb-1.5 block ${MICRO_LABEL}`}>
+                {t.label} <span className="normal-case tracking-normal">({t.unit})</span>
+              </label>
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.01"
+                min="0"
+                value={values[t.key] ?? ""}
+                onChange={(e) => setVal(t.key, e.target.value)}
+                placeholder="—"
+                className={INPUT}
+              />
             </div>
-          )}
+          ))}
+        </div>
 
-          <div className="flex gap-2 pt-1">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 rounded-xl border bg-background px-4 py-3 text-sm font-medium text-foreground hover:bg-muted"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-            >
-              <Plus className="h-4 w-4" />
-              {saving ? "Saving…" : "Save"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <div>
+          <label className={`mb-1.5 block ${MICRO_LABEL}`}>Notes (optional)</label>
+          <textarea
+            rows={2}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            maxLength={500}
+            placeholder="Lab name, doctor, observations…"
+            className={INPUT}
+          />
+        </div>
+
+        {error && <ErrorNote>{error}</ErrorNote>}
+
+        <div className="flex gap-2 pt-1">
+          <button type="button" onClick={onClose} className={`flex-1 ${BUTTON_GHOST}`}>
+            Cancel
+          </button>
+          <button type="submit" disabled={saving} className={`flex-1 ${BUTTON_PRIMARY}`}>
+            <Plus className="h-4 w-4" />
+            {saving ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </form>
+    </BottomSheet>
   );
 }

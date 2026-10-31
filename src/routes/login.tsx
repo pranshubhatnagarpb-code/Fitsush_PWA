@@ -2,6 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import fitsushLogo from "@/assets/fitsush-logo.webp";
+import { Mail, Phone, Lock, Loader2 } from "lucide-react";
+import { HERO_GRADIENT, INPUT, MICRO_LABEL, ErrorNote } from "@/components/ui-cards";
 
 export const Route = createFileRoute("/login")({
   component: LoginPage,
@@ -57,93 +59,111 @@ function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background px-6">
-      <div className="mb-8 flex flex-col items-center">
-        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow-sm">
-          <img src={fitsushLogo} alt="Fitsush" className="h-10 w-10 object-contain" />
-        </div>
-        <h1 className="font-display text-2xl font-bold text-foreground">Fitsush</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Your nutrition journey, simplified</p>
-      </div>
-
-      <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-4">
-        <div className="grid grid-cols-2 gap-1 rounded-xl bg-muted p-1">
-          {(["email", "phone"] as const).map((m) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => {
-                setMode(m);
-                setIdentifier("");
-                setError("");
-              }}
-              className={`rounded-lg py-2 text-xs font-semibold transition-colors ${
-                mode === m
-                  ? "bg-card text-foreground shadow-sm"
-                  : "text-muted-foreground"
-              }`}
-            >
-              {m === "email" ? "Email" : "Phone"}
-            </button>
-          ))}
-        </div>
-
-        {error && (
-          <div className="rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive">
-            {error}
+    <div className="min-h-screen bg-background">
+      <header
+        className={`relative overflow-hidden px-6 pt-[calc(3rem+env(safe-area-inset-top))] pb-24 text-center text-white ${HERO_GRADIENT}`}
+      >
+        <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-white/10 blur-2xl" />
+        <div className="pointer-events-none absolute -bottom-20 -left-12 h-48 w-48 rounded-full bg-hero-glow/25 blur-2xl" />
+        <div className="relative flex flex-col items-center">
+          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow-lg shadow-black/10">
+            <img src={fitsushLogo} alt="Fitsush" className="h-10 w-10 object-contain" />
           </div>
-        )}
-
-        <div>
-          <label htmlFor="identifier" className="mb-1.5 block text-sm font-medium text-foreground">
-            {mode === "email" ? "Email" : "Phone"}
-          </label>
-          <input
-            id="identifier"
-            type={mode === "email" ? "email" : "tel"}
-            inputMode={mode === "email" ? "email" : "tel"}
-            required
-            value={identifier}
-            onChange={(e) => setIdentifier(e.target.value)}
-            className="w-full rounded-xl border bg-card px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-            placeholder={mode === "email" ? "you@example.com" : "+911234567890"}
-            autoComplete={mode === "email" ? "email" : "tel"}
-          />
-          {mode === "phone" && (
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              Include country code (e.g. +91 for India).
-            </p>
-          )}
+          <h1 className="font-display text-3xl font-bold">Fitsush</h1>
+          <p className="mt-1 text-sm text-white/85">Your nutrition journey, simplified</p>
         </div>
+      </header>
 
-        <div>
-          <label htmlFor="password" className="mb-1.5 block text-sm font-medium text-foreground">
-            Password
-          </label>
-          <input
-            id="password"
-            type="password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-xl border bg-card px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-            placeholder="••••••••"
-            autoComplete="current-password"
-          />
-        </div>
+      <div className="relative mx-auto -mt-16 w-full max-w-sm px-4 pb-[calc(2rem+env(safe-area-inset-bottom))]">
+        <form onSubmit={handleSubmit} className="space-y-4 rounded-3xl border bg-card p-6 shadow-xl shadow-foreground/5">
+          <div>
+            <h2 className="font-display text-xl font-bold text-foreground">Welcome back</h2>
+            <p className="text-sm text-muted-foreground">Sign in to see your plan and progress</p>
+          </div>
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
-        >
-          {loading ? "Signing in…" : "Sign In"}
-        </button>
-      </form>
+          <div className="grid grid-cols-2 gap-1 rounded-full bg-muted p-1">
+            {(["email", "phone"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => {
+                  setMode(m);
+                  setIdentifier("");
+                  setError("");
+                }}
+                className={`rounded-full py-2 text-xs font-semibold transition-all ${
+                  mode === m ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
+                }`}
+              >
+                {m === "email" ? "Email" : "Phone"}
+              </button>
+            ))}
+          </div>
 
-      <p className="mt-8 text-xs text-muted-foreground">
-        Contact your nutritionist if you don't have an account
-      </p>
+          {error && <ErrorNote>{error}</ErrorNote>}
+
+          <div>
+            <label htmlFor="identifier" className={`mb-1.5 block ${MICRO_LABEL}`}>
+              {mode === "email" ? "Email" : "Phone"}
+            </label>
+            <div className="relative">
+              {mode === "email" ? (
+                <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              ) : (
+                <Phone className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              )}
+              <input
+                id="identifier"
+                type={mode === "email" ? "email" : "tel"}
+                inputMode={mode === "email" ? "email" : "tel"}
+                required
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
+                className={`${INPUT} pl-11`}
+                placeholder={mode === "email" ? "you@example.com" : "+911234567890"}
+                autoComplete={mode === "email" ? "email" : "tel"}
+              />
+            </div>
+            {mode === "phone" && (
+              <p className="mt-1.5 text-[11px] text-muted-foreground">
+                Include country code (e.g. +91 for India).
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label htmlFor="password" className={`mb-1.5 block ${MICRO_LABEL}`}>
+              Password
+            </label>
+            <div className="relative">
+              <Lock className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <input
+                id="password"
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className={`${INPUT} pl-11`}
+                placeholder="••••••••"
+                autoComplete="current-password"
+              />
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="flex w-full items-center justify-center gap-2 rounded-full bg-primary px-4 py-3.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 transition-transform hover:bg-primary/90 active:scale-[0.98] disabled:opacity-50"
+          >
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            {loading ? "Signing in…" : "Sign In"}
+          </button>
+        </form>
+
+        <p className="mt-6 text-center text-xs text-muted-foreground">
+          Contact your nutritionist if you don't have an account
+        </p>
+      </div>
     </div>
   );
 }
