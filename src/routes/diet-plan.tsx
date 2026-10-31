@@ -6,7 +6,7 @@ import type { DietPlan, ClientDietPlanFile, Client } from "@/lib/types";
 import { PageShell } from "@/components/app-shell";
 import { EmptyState, LoadingSpinner } from "@/components/ui-cards";
 import { Utensils, CalendarDays, FileText, Download, Eye, FileDown, ShoppingCart, ExternalLink, Loader2 } from "lucide-react";
-import { printDietPlan } from "@/lib/dietPlanPdf";
+import { downloadDietPlanPdf } from "@/lib/dietPlanPdf";
 
 const PRIMARY_BUCKET = "diet-plan-pdfs";
 const FALLBACK_BUCKET = "diet-pdfs";
@@ -165,7 +165,7 @@ function DietPlanPage() {
     setBusyKey(key);
     setErrorMsg(null);
     try {
-      await printDietPlan(plan, clientProfile);
+      await downloadDietPlanPdf(plan, clientProfile);
     } catch (e: any) {
       setErrorMsg(e?.message ?? "Could not prepare the PDF");
     } finally {

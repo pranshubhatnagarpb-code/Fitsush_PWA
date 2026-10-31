@@ -8,6 +8,7 @@ import {
   type RecipeRow,
   type AffiliateProductRow,
 } from "@/lib/dietPlanHtml";
+import { dietPlanHtmlToPdfBlob, dietPlanPdfFileName } from "@/lib/dietPlanPdfFile";
 
 // Loads what the shared diet chart layout (dietPlanHtml.ts — identical to
 // PMS's copy) needs, so the client's "Download PDF" matches what PMS prints.
@@ -89,17 +90,20 @@ export async function loadPlanHtml(plan: any, client: any): Promise<string> {
   return buildPlanHtml({ ...plan, clients: client, diet_plan_days: days }, { recipes, affiliateProducts, logoDataUrl });
 }
 
-// Prints via a hidden iframe — window.open/_blank popups are blocked in PWA standalone mode.
-export async function printDietPlan(plan: any, client: any): Promise<void> {
-  const html = await loadPlanHtml(plan, client);
-  const iframe = document.createElement("iframe");
-  iframe.style.cssText = "position:fixed;width:0;height:0;border:none;opacity:0";
-  iframe.srcdoc = html;
-  iframe.onload = () => {
-    setTimeout(() => {
-      iframe.contentWindow?.print();
-      setTimeout(() => document.body.removeChild(iframe), 1000);
-    }, 400);
-  };
-  document.body.appendChild(iframe);
+// Downloads the chart as a PDF file, rendered by the shared dietPlanPdfFile.ts —
+// the same renderer PMS uses for the PDF it makes on Publish. (The browser's
+// print dialog gave a different file per device, and on iOS printed the portal
+// page instead of the chart.)
+export async function downloadDietPlanPdf(plan: any, client: any): Promise<void> {
+  const blob = await dietPlanHtmlToPdfBlob(await loadPlanHtml(plan, client));
+  if (!blob) throw new Error("Could not prepare the PDF");
+  // Anchor download, not window.open — popups are blocked in PWA standalone mode.
+  const blobUrl = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = blobUrl;
+  a.download = dietPlanPdfFileName(plan.plan_name);
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
 }
