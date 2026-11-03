@@ -438,7 +438,7 @@ function BloodReportForm({ clientId, onClose, onSaved }: FormProps) {
               <input
                 type="number"
                 inputMode="decimal"
-                step="0.01"
+                step="any"
                 min="0"
                 value={values[t.key] ?? ""}
                 onChange={(e) => setVal(t.key, e.target.value)}
