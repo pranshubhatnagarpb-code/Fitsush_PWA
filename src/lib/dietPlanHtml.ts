@@ -77,9 +77,15 @@ export function manualRecipeKeys(days: any[]): string[] {
     const n = String(text ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '');
     if (n) names.add(n);
   };
+  // Keys come out in chart order (day by day, meal by meal), which is the
+  // order the recipes print in.
   (days ?? []).forEach((d) => {
-    dayMeals(d).forEach(({ options }) => options.forEach(add));
-    if (Array.isArray(d?.meals)) d.meals.forEach((m: any) => (Array.isArray(m?.recipes) ? m.recipes : []).forEach(add));
+    const stored = Array.isArray(d?.meals) && d.meals.length > 0 ? d.meals : null;
+    dayMeals(d).forEach(({ options }, i) => {
+      options.forEach(add);
+      const picked = stored?.[i]?.recipes;
+      (Array.isArray(picked) ? picked : []).forEach(add);
+    });
   });
   return [...names];
 }

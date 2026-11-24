@@ -43,8 +43,14 @@ async function fetchRecipesForAIPlan(aiData: any): Promise<RecipeRow[]> {
 async function fetchRecipesForManualPlan(days: any[]): Promise<RecipeRow[]> {
   const keys = manualRecipeKeys(days);
   if (keys.length === 0) return [];
-  const { data, error } = await supabase.from("meal_recipes").select(RECIPE_COLUMNS).in("meal_name_normalized", keys);
-  return error || !data ? [] : (data as RecipeRow[]);
+  const { data, error } = await supabase.from("meal_recipes").select(`${RECIPE_COLUMNS}, meal_name_normalized`).in("meal_name_normalized", keys);
+  if (error || !data) return [];
+  // Print in the order the meals appear in the plan, not the database's order.
+  const rank = new Map(keys.map((k, i) => [k, i]));
+  return (data as (RecipeRow & { meal_name_normalized?: string })[])
+    .slice()
+    .sort((a, b) => (rank.get(a.meal_name_normalized ?? "") ?? keys.length) - (rank.get(b.meal_name_normalized ?? "") ?? keys.length))
+    .map(({ meal_name_normalized: _key, ...recipe }) => recipe);
 }
 
 // Manual plans keep their meals in diet_plan_days (the PWA's plan row doesn't include them).
