@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import fitsushLogo from "@/assets/fitsush-logo.webp";
-import { Mail, Phone, Lock, Loader2 } from "lucide-react";
+import { Mail, Lock, Loader2 } from "lucide-react";
 import { HERO_GRADIENT, INPUT, MICRO_LABEL, ErrorNote } from "@/components/ui-cards";
 
 export const Route = createFileRoute("/login")({
@@ -11,7 +11,6 @@ export const Route = createFileRoute("/login")({
 
 function LoginPage() {
   const { signIn, isAuthenticated } = useAuth();
-  const [mode, setMode] = useState<"email" | "phone">("email");
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -22,33 +21,16 @@ function LoginPage() {
     return null;
   }
 
-  const normalizePhone = (raw: string) => {
-    const trimmed = raw.trim().replace(/[\s-]/g, "");
-    if (!trimmed) return "";
-    // Ensure E.164: must start with + and country code
-    return trimmed.startsWith("+") ? trimmed : `+${trimmed}`;
-  };
-
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError("");
     const id = identifier.trim();
     if (!id) {
-      setError(mode === "email" ? "Enter your email" : "Enter your phone number");
+      setError("Enter your email");
       return;
     }
-    if (mode === "phone") {
-      const normalized = normalizePhone(id);
-      if (!/^\+\d{8,15}$/.test(normalized)) {
-        setError("Enter phone with country code, e.g. +911234567890");
-        return;
-      }
-    }
     setLoading(true);
-    const payload =
-      mode === "email"
-        ? { email: id, password }
-        : { phone: normalizePhone(id), password };
+    const payload = { email: id, password };
     const result = await signIn(payload);
     if (result.error) {
       setError(result.error);
@@ -81,54 +63,26 @@ function LoginPage() {
             <p className="text-sm text-muted-foreground">Sign in to see your plan and progress</p>
           </div>
 
-          <div className="grid grid-cols-2 gap-1 rounded-full bg-muted p-1">
-            {(["email", "phone"] as const).map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => {
-                  setMode(m);
-                  setIdentifier("");
-                  setError("");
-                }}
-                className={`rounded-full py-2 text-xs font-semibold transition-all ${
-                  mode === m ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
-                }`}
-              >
-                {m === "email" ? "Email" : "Phone"}
-              </button>
-            ))}
-          </div>
-
           {error && <ErrorNote>{error}</ErrorNote>}
 
           <div>
             <label htmlFor="identifier" className={`mb-1.5 block ${MICRO_LABEL}`}>
-              {mode === "email" ? "Email" : "Phone"}
+              Email
             </label>
             <div className="relative">
-              {mode === "email" ? (
-                <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              ) : (
-                <Phone className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              )}
+              <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <input
                 id="identifier"
-                type={mode === "email" ? "email" : "tel"}
-                inputMode={mode === "email" ? "email" : "tel"}
+                type="email"
+                inputMode="email"
                 required
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
                 className={`${INPUT} pl-11`}
-                placeholder={mode === "email" ? "you@example.com" : "+911234567890"}
-                autoComplete={mode === "email" ? "email" : "tel"}
+                placeholder="you@example.com"
+                autoComplete="email"
               />
             </div>
-            {mode === "phone" && (
-              <p className="mt-1.5 text-[11px] text-muted-foreground">
-                Include country code (e.g. +91 for India).
-              </p>
-            )}
           </div>
 
           <div>
